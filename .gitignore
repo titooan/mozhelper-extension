@@ -4,7 +4,6 @@ build/
 
 # Dependencies
 node_modules/
-package-lock.json
 
 # Editor cruft
 .DS_Store
