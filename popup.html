@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Moz Helper Suite Controls</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      font-family: system-ui, sans-serif;
+      --mh-surface: #ffffff;
+      --mh-text: #1f2430;
+      --mh-status: #2e7d32;
+      --mh-accent: #304ffe;
+      --mh-accent-hover: #1b36c6;
+      --mh-border: rgba(60, 64, 67, 0.3);
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --mh-surface: rgba(24, 28, 38, 0.98);
+        --mh-text: #f5f7ff;
+        --mh-status: #7fd87f;
+        --mh-accent: #8ab4ff;
+        --mh-accent-hover: #77a3ee;
+        --mh-border: rgba(255, 255, 255, 0.2);
+      }
+    }
+    body {
+      margin: 12px;
+      width: 280px;
+      background: var(--mh-surface);
+      color: var(--mh-text);
+    }
+    header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 8px;
+    }
+    header img {
+      width: 32px;
+      height: 32px;
+    }
+    header h1 {
+      font-size: 1.1rem;
+      margin: 0;
+    }
+    label {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.95rem;
+      margin-bottom: 8px;
+    }
+    input[type="checkbox"] {
+      width: 16px;
+      height: 16px;
+    }
+    button {
+      width: 100%;
+      border-radius: 8px;
+      padding: 8px;
+      font-size: 0.95rem;
+      margin-top: 8px;
+      background: var(--mh-accent);
+      color: #fff;
+      border: 1px solid var(--mh-border);
+      cursor: pointer;
+    }
+    button:hover {
+      background: var(--mh-accent-hover);
+    }
+    #status {
+      margin-top: 6px;
+      font-size: 0.85rem;
+      color: var(--mh-status);
+      min-height: 1.1em;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <img src="icons/32.png" alt="Moz Helper icon">
+    <h1>Moz Helper Suite</h1>
+  </header>
+
+  <label>
+    <input type="checkbox" id="popupEnableGmail">
+    Gmail Bugzilla linkifier
+  </label>
+
+  <label>
+    <input type="checkbox" id="popupEnablePhabricator">
+    Phabricator inline video player
+  </label>
+
+  <label>
+    <input type="checkbox" id="popupEnableBugzilla">
+    Bugzilla markdown paste helper
+  </label>
+
+  <label>
+    <input type="checkbox" id="popupEnableTreeherder">
+    Treeherder Firebase TestLab helper
+  </label>
+
+  <button id="openOptions" type="button">Open detailed settings</button>
+  <p id="status"></p>
+
+  <script src="settings.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>

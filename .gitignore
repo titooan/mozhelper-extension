@@ -1,0 +1,13 @@
+# Build artifacts
+build/
+*.xpi
+
+# Dependencies
+node_modules/
+package-lock.json
+
+# Editor cruft
+.DS_Store
+*.log
+.idea/
+*.iml

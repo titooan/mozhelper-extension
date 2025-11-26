@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Moz Helper Suite Settings</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      font-family: system-ui, sans-serif;
+      --mh-surface: #ffffff;
+      --mh-border: rgba(60, 64, 67, 0.25);
+      --mh-shadow: rgba(15, 23, 42, 0.08);
+      --mh-text: #1f2430;
+      --mh-surface-card: #f7f9ff;
+      --mh-accent: #304ffe;
+      --mh-status: #2e7d32;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --mh-surface: rgba(24, 28, 38, 0.97);
+        --mh-surface-card: rgba(36, 42, 58, 0.92);
+        --mh-border: rgba(255, 255, 255, 0.12);
+        --mh-shadow: rgba(4, 12, 30, 0.55);
+        --mh-text: #f5f7ff;
+        --mh-accent: #8ab4ff;
+        --mh-status: #7fd87f;
+      }
+    }
+    body {
+      margin: 24px;
+      max-width: 520px;
+      line-height: 1.5;
+      color: var(--mh-text);
+      background: var(--mh-surface);
+    }
+    header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+    header img {
+      width: 48px;
+      height: 48px;
+    }
+    h1 {
+      margin: 0;
+      font-size: 1.6rem;
+    }
+    .card {
+      border: 1px solid var(--mh-border);
+      border-radius: 10px;
+      padding: 16px 20px;
+      box-shadow: 0 8px 24px var(--mh-shadow);
+      background: var(--mh-surface-card);
+      backdrop-filter: blur(2px);
+    }
+    label {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 12px;
+      font-size: 1rem;
+    }
+    input[type="checkbox"] {
+      width: 18px;
+      height: 18px;
+    }
+    #status {
+      margin-top: 12px;
+      color: var(--mh-status);
+      min-height: 1.2em;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <img src="icons/48.png" alt="Moz Helper Suite icon">
+    <div>
+      <h1>Moz Helper Suite</h1>
+      <p style="margin: 4px 0 0;">Enable or disable individual helpers.</p>
+    </div>
+  </header>
+
+  <div class="card">
+    <label>
+      <input type="checkbox" id="enableGmail">
+      Gmail Bugzilla linkifier
+    </label>
+
+    <label>
+      <input type="checkbox" id="enablePhabricator">
+      Phabricator inline video player
+    </label>
+
+    <label>
+      <input type="checkbox" id="enableBugzilla">
+      Bugzilla markdown paste helper
+    </label>
+
+    <label>
+      <input type="checkbox" id="enableTreeherder">
+      Treeherder Firebase TestLab helper
+    </label>
+
+    <p id="status"></p>
+  </div>
+
+  <script src="settings.js"></script>
+  <script src="options.js"></script>
+</body>
+</html>

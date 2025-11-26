@@ -1,0 +1,23 @@
+{
+  "name": "mozilla-helper-suite",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Unified Mozilla helper extension: Gmail Bugzilla linkifier, Phabricator inline video player, Bugzilla markdown paste helper.",
+  "scripts": {
+    "test": "mocha",
+    "clean": "rm -rf build/*",
+    "build:copy": "mkdir -p build && cp -r manifest.json background.js options.html options.js popup.html popup.js settings.js content src icons build/",
+    "build:xpi": "cd build && zip -r ../mozilla-helper.xpi .",
+    "lint:webext": "NODE_OPTIONS=\"--require ./tools/webext-diag-polyfill.cjs\" web-ext lint --source-dir build",
+    "build": "npm run clean && npm run build:copy && npm run build:xpi && npm run lint:webext",
+    "package": "npm test && npm run build"
+  },
+  "devDependencies": {
+    "chai": "^4.4.1",
+    "jsdom": "^24.0.0",
+    "mocha": "^10.2.0"
+  },
+  "dependencies": {
+    "undici": "^5.29.0"
+  }
+}

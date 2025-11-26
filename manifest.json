@@ -1,0 +1,75 @@
+{
+  "manifest_version": 3,
+  "name": "Moz Helper Suite",
+  "version": "1.0",
+  "description": "Unified Mozilla helper: Gmail Bugzilla linkifier, Phabricator inline videos, Bugzilla markdown paste helper.",
+  "icons": {
+    "16": "icons/16.png",
+    "32": "icons/32.png",
+    "48": "icons/48.png",
+    "96": "icons/96.png",
+    "128": "icons/128.png"
+  },
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "mozilla-helper@titouan",
+      "data_collection_permissions": {
+        "required": ["none"],
+        "has_previous_consent": false
+      }
+    }
+  },
+  "action": {
+    "default_icon": {
+      "16": "icons/16.png",
+      "32": "icons/32.png"
+    },
+    "default_popup": "popup.html",
+    "default_title": "Moz Helper Suite"
+  },
+  "background": {
+    "scripts": ["background.js"],
+    "persistent": false
+  },
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": true
+  },
+  "permissions": [
+    "storage"
+  ],
+  "host_permissions": [
+    "https://*.mozilla.org/*",
+    "https://*.allizom.org/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": ["https://mail.google.com/*"],
+      "js": ["content/gmail.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://phabricator.services.mozilla.com/*"],
+      "js": ["content/phabricator.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://*.mozilla.org/*",
+        "https://*.allizom.org/*"
+      ],
+      "include_globs": [
+        "https://bugzilla*.mozilla.org/*",
+        "https://bugzilla*.allizom.org/*"
+      ],
+      "js": ["content/bugzilla.js"],
+      "run_at": "document_idle",
+      "all_frames": true
+    },
+    {
+      "matches": ["https://treeherder.mozilla.org/*"],
+      "js": ["content/treeherder.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}
