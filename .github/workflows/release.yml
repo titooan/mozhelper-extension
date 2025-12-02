@@ -22,6 +22,12 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Sync manifest version with tag
+        run: |
+          RELEASE_VERSION="${GITHUB_REF_NAME#v}"
+          jq --arg version "$RELEASE_VERSION" '.version = $version' manifest.json > manifest.tmp
+          mv manifest.tmp manifest.json
+
       - name: Run tests
         run: npm test
 
