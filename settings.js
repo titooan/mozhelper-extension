@@ -3,6 +3,7 @@ const MozHelperSettings = (() => {
   const defaultSettings = {
     enableGmail: true,
     enablePhabricator: true,
+    enablePhabricatorPaste: true,
     enableBugzilla: true,
     enableTreeherder: true
   };

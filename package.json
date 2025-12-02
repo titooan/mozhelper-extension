@@ -2,7 +2,7 @@
   "name": "mozilla-helper-suite",
   "version": "1.0.0",
   "type": "module",
-  "description": "Unified Mozilla helper extension: Gmail Bugzilla linkifier, Phabricator inline video player, Bugzilla markdown paste helper.",
+  "description": "Unified Mozilla helper extension: Gmail Bugzilla linkifier, Phabricator inline video player and markdown paste helper, Bugzilla markdown paste helper.",
   "scripts": {
     "test": "mocha",
     "clean": "rm -rf build/*",

@@ -9,6 +9,7 @@ Moz Helper Suite is a Firefox add-on that bundles several small productivity fea
 - Gmail Bugzilla linkifier with rich tooltips – automatically turns “Bug 123456” references in Gmail into Bugzilla links, with hover cards that surface status, assignee, product, and component.
 - Bugzilla markdown paste helper – when you highlight text in the Bugzilla comment box and paste a URL, the helper replaces it with proper `[text](url)` syntax so you never type Markdown by hand.
 - Phabricator inline video player – detects video artifacts in comments and renders an inline `<video>` player so you can review attachments without downloading them.
+- Phabricator markdown paste helper – highlight text in any remarkup field and paste a link to instantly wrap the selection with `[text](url)` markdown without touching the mouse again.
 - Treeherder Firebase TestLab helper – adds a Firebase button to the Treeherder job summary and navigation bar that fetches the latest TestLab link via Taskcluster.
 - Shared settings/popup surfaces – a toolbar popup and options page let you enable or disable each helper individually, with sync storage keeping preferences aligned across browsers.
 
