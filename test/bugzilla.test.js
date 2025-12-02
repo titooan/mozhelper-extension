@@ -1,15 +1,39 @@
 import { expect } from "chai";
 import { shouldTransformPaste, markdownReplace, markdownTransform } from "../src/bugzilla/mdPaste.js";
 
+function transformAllowed(original, start, end, pasted) {
+  const selected = original.slice(start, end);
+  return shouldTransformPaste(original, start, end, selected, pasted);
+}
+
 describe("Bugzilla markdown paste", () => {
   it("decides correctly when to transform", () => {
-    expect(shouldTransformPaste("text", "https://mozilla.org")).to.be.true;
-    expect(shouldTransformPaste("text", "mozilla.org")).to.be.true;
-    expect(shouldTransformPaste("text", "test")).to.be.false;
+    expect(transformAllowed("hello world", 0, 5, "https://mozilla.org")).to.be.true;
+    expect(transformAllowed("hello world", 0, 5, "mozilla.org")).to.be.true;
+    expect(transformAllowed("hello world", 0, 5, "test")).to.be.false;
   });
   it("requires selected text and real URLs", () => {
-    expect(shouldTransformPaste("", "https://mozilla.org")).to.be.false;
-    expect(shouldTransformPaste("text", "file.png")).to.be.false;
+    expect(shouldTransformPaste("hello", 0, 0, "", "https://mozilla.org")).to.be.false;
+    expect(transformAllowed("hello", 0, 5, "file.png")).to.be.false;
+  });
+  it("ignores selections that are already links", () => {
+    const text = "see https://example.com";
+    expect(transformAllowed(text, 4, text.length, "https://mozilla.org")).to.be.false;
+  });
+  it("ignores selections overlapping markdown links", () => {
+    const text = "see [Bug 123](https://example.com/Bug123)";
+    expect(transformAllowed(text, 5, 14, "https://mozilla.org")).to.be.false;
+    expect(transformAllowed(text, 5, text.length, "https://mozilla.org")).to.be.false;
+    const urlSlice = "example.com/Bug123";
+    const start = text.indexOf(urlSlice);
+    const end = start + urlSlice.length;
+    expect(transformAllowed(text, start, end, "https://mozilla.org")).to.be.false;
+  });
+  it("still transforms outside markdown links", () => {
+    const text = "prefix [Bug 123](https://example.com/Bug123) suffix text";
+    const start = text.indexOf("suffix");
+    const end = start + "suffix".length;
+    expect(transformAllowed(text, start, end, "https://mozilla.org")).to.be.true;
   });
   it("wraps selected text with markdown", () => {
     const original = "hello world";

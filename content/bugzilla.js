@@ -20,9 +20,26 @@ function bugzillaIsLikelyURL(text) {
   return false;
 }
 
-function bugzillaShouldTransformPaste(selectedText, pastedText) {
+function bugzillaSelectionOverlapsMarkdown(text, selectionStart, selectionEnd) {
+  if (!text) return false;
+  const regex = /\[[^\]]+\]\([^)]+\)/g;
+  let match;
+  while ((match = regex.exec(text)) !== null) {
+    const matchStart = match.index;
+    const matchEnd = matchStart + match[0].length;
+    if (selectionStart >= matchStart && selectionEnd <= matchEnd) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function bugzillaShouldTransformPaste(original, selectionStart, selectionEnd, selectedText, pastedText) {
   if (!selectedText || !pastedText) return false;
-  return bugzillaIsLikelyURL(pastedText);
+  if (!bugzillaIsLikelyURL(pastedText)) return false;
+  if (bugzillaIsLikelyURL(selectedText)) return false;
+  if (bugzillaSelectionOverlapsMarkdown(original, selectionStart, selectionEnd)) return false;
+  return true;
 }
 
 function bugzillaMarkdownTransform(original, selectionStart, selectionEnd, pastedURL) {
@@ -59,7 +76,7 @@ function bugzillaHandlePaste(event) {
   const pasted = (clipboard.getData("text/plain") || "").trim();
   const selected = target.value.slice(start, end);
 
-  if (!bugzillaShouldTransformPaste(selected, pasted)) return;
+  if (!bugzillaShouldTransformPaste(target.value, start, end, selected, pasted)) return;
 
   event.preventDefault();
   const { text, caret } = bugzillaMarkdownTransform(target.value, start, end, pasted);

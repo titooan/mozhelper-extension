@@ -73,9 +73,24 @@ function phabIsLikelyURL(text) {
   return false;
 }
 
-function phabShouldTransformPaste(selectedText, pastedText) {
+function phabSelectionOverlapsMarkdown(text, selectionStart, selectionEnd) {
+  if (!text) return false;
+  const regex = /\[[^\]]+\]\([^)]+\)/g;
+  let match;
+  while ((match = regex.exec(text)) !== null) {
+    const matchStart = match.index;
+    const matchEnd = matchStart + match[0].length;
+    if (selectionStart >= matchStart && selectionEnd <= matchEnd) return true;
+  }
+  return false;
+}
+
+function phabShouldTransformPaste(original, selectionStart, selectionEnd, selectedText, pastedText) {
   if (!selectedText || !pastedText) return false;
-  return phabIsLikelyURL(pastedText);
+  if (!phabIsLikelyURL(pastedText)) return false;
+  if (phabIsLikelyURL(selectedText)) return false;
+  if (phabSelectionOverlapsMarkdown(original, selectionStart, selectionEnd)) return false;
+  return true;
 }
 
 function phabMarkdownTransform(original, selectionStart, selectionEnd, pastedURL) {
@@ -103,7 +118,7 @@ function phabHandlePaste(event) {
   if (!clipboard) return;
   const pasted = (clipboard.getData("text/plain") || "").trim();
   const selected = target.value.slice(start, end);
-  if (!phabShouldTransformPaste(selected, pasted)) return;
+  if (!phabShouldTransformPaste(target.value, start, end, selected, pasted)) return;
 
   event.preventDefault();
   const { text, caret } = phabMarkdownTransform(target.value, start, end, pasted);
