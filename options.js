@@ -1,6 +1,7 @@
 document.addEventListener("DOMContentLoaded", () => {
   const checkboxes = {
     enableGmail: document.getElementById("enableGmail"),
+    enableGmailHover: document.getElementById("enableGmailHover"),
     enablePhabricator: document.getElementById("enablePhabricator"),
     enablePhabricatorPaste: document.getElementById("enablePhabricatorPaste"),
     enableBugzilla: document.getElementById("enableBugzilla"),
@@ -11,5 +12,10 @@ document.addEventListener("DOMContentLoaded", () => {
     checkboxes,
     statusElement: document.getElementById("status"),
     showStatus: true
+  });
+
+  MozHelperSettings.bindDependentToggle({
+    parent: checkboxes.enableGmail,
+    child: checkboxes.enableGmailHover
   });
 });

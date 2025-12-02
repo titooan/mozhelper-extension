@@ -2,8 +2,9 @@
 
 const gmailRuntime = (typeof browser !== "undefined" ? browser : chrome);
 const gmailStorage = gmailRuntime.storage;
-const gmailDefaultSettings = { enableGmail: true };
+const gmailDefaultSettings = { enableGmail: true, enableGmailHover: true };
 let gmailEnabled = true;
+let gmailHoverEnabled = true;
 
 const GMAIL_BUG_REGEX = /\bBug (\d+)\b/g;
 const gmailBugCache = {};
@@ -257,6 +258,7 @@ function gmailRenderTooltip(bug, x, y) {
 }
 
 function gmailHideTooltip() {
+  gmailCurrentHoverBugId = null;
   gmailTooltip.style.display = "none";
 }
 
@@ -293,6 +295,7 @@ function gmailLinkifyTextNode(textNode) {
     a.addEventListener("click", swallow);
     a.addEventListener("mousedown", swallow);
     a.addEventListener("mouseenter", (event) => {
+      if (!gmailHoverEnabled) return;
       gmailCurrentHoverBugId = id;
       const coords = { x: event.clientX, y: event.clientY };
       gmailShowTooltipLoading(coords.x, coords.y);
@@ -301,11 +304,13 @@ function gmailLinkifyTextNode(textNode) {
       });
     });
     a.addEventListener("mousemove", (event) => {
+      if (!gmailHoverEnabled) return;
       if (gmailCurrentHoverBugId === id && gmailTooltip.style.display === "block") {
         gmailPositionTooltip(event.clientX, event.clientY);
       }
     });
     a.addEventListener("mouseleave", () => {
+      if (!gmailHoverEnabled) return;
       if (gmailCurrentHoverBugId === id) gmailCurrentHoverBugId = null;
       gmailHideTooltip();
     });
@@ -386,6 +391,7 @@ function gmailSetupObserver() {
 function gmailInit() {
   gmailStorage.sync.get(gmailDefaultSettings).then((items) => {
     gmailEnabled = items.enableGmail ?? true;
+    gmailHoverEnabled = items.enableGmailHover ?? true;
     if (gmailEnabled) gmailProcessAllTargets();
   });
   const runtime = (typeof browser !== "undefined" ? browser : chrome);
@@ -394,6 +400,10 @@ function gmailInit() {
     if (changes.enableGmail) {
       gmailEnabled = changes.enableGmail.newValue;
       if (gmailEnabled) gmailProcessAllTargets();
+    }
+    if (changes.enableGmailHover) {
+      gmailHoverEnabled = changes.enableGmailHover.newValue;
+      if (!gmailHoverEnabled) gmailHideTooltip();
     }
   });
   gmailSetupObserver();

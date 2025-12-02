@@ -2,6 +2,7 @@ const MozHelperSettings = (() => {
   const storage = typeof browser !== "undefined" ? browser.storage : chrome.storage;
   const defaultSettings = {
     enableGmail: true,
+    enableGmailHover: true,
     enablePhabricator: true,
     enablePhabricatorPaste: true,
     enableBugzilla: true,
@@ -10,7 +11,9 @@ const MozHelperSettings = (() => {
 
   function applyState(checkboxes, values) {
     Object.entries(checkboxes).forEach(([key, checkbox]) => {
-      if (checkbox) checkbox.checked = Boolean(values[key]);
+      if (!checkbox) return;
+      checkbox.checked = Boolean(values[key]);
+      checkbox.dispatchEvent(new CustomEvent("mozhelper:sync", { detail: { value: checkbox.checked } }));
     });
   }
 
@@ -53,14 +56,37 @@ const MozHelperSettings = (() => {
     storage.onChanged.addListener((changes, area) => {
       if (area !== "sync") return;
       entries.forEach(([key, checkbox]) => {
-        if (changes[key] && checkbox) checkbox.checked = changes[key].newValue;
+        if (changes[key] && checkbox) {
+          checkbox.checked = changes[key].newValue;
+          checkbox.dispatchEvent(
+            new CustomEvent("mozhelper:sync", { detail: { value: checkbox.checked } })
+          );
+        }
       });
       if (showStatus) setStatus("");
     });
   }
 
+  function bindDependentToggle({ parent, child, label } = {}) {
+    if (!parent || !child) return;
+    const labelEl = label || child.closest("label");
+    const update = () => {
+      const enabled = Boolean(parent.checked);
+      child.disabled = !enabled;
+      if (labelEl) labelEl.classList.toggle("disabled", !enabled);
+    };
+    parent.addEventListener("change", update);
+    parent.addEventListener("mozhelper:sync", update);
+    update();
+  }
+
   return {
     initToggles,
-    defaultSettings
+    defaultSettings,
+    bindDependentToggle
   };
 })();
+
+if (typeof globalThis !== "undefined") {
+  globalThis.MozHelperSettings = MozHelperSettings;
+}
