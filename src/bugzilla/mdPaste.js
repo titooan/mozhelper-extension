@@ -1,8 +1,25 @@
 import { isLikelyURL } from "../utils/url.js";
 
-export function shouldTransformPaste(selectedText, pastedText) {
+function selectionInsideMarkdownLink(text, selectionStart, selectionEnd) {
+  if (!text) return false;
+  const regex = /\[[^\]]+\]\([^)]+\)/g;
+  let match;
+  while ((match = regex.exec(text)) !== null) {
+    const matchStart = match.index;
+    const matchEnd = matchStart + match[0].length;
+    if (selectionStart >= matchStart && selectionEnd <= matchEnd) {
+      return true;
+    }
+  }
+  return false;
+}
+
+export function shouldTransformPaste(original, selectionStart, selectionEnd, selectedText, pastedText) {
   if (!selectedText || !pastedText) return false;
-  return isLikelyURL(pastedText);
+  if (!isLikelyURL(pastedText)) return false;
+  if (isLikelyURL(selectedText)) return false;
+  if (selectionInsideMarkdownLink(original, selectionStart, selectionEnd)) return false;
+  return true;
 }
 
 export function markdownTransform(original, selectionStart, selectionEnd, pastedURL) {
