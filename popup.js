@@ -3,6 +3,7 @@ const runtime = typeof browser !== "undefined" ? browser : chrome;
 document.addEventListener("DOMContentLoaded", () => {
   const checkboxes = {
     enableGmail: document.getElementById("popupEnableGmail"),
+    enableGmailHover: document.getElementById("popupEnableGmailHover"),
     enablePhabricator: document.getElementById("popupEnablePhabricator"),
     enablePhabricatorPaste: document.getElementById("popupEnablePhabricatorPaste"),
     enableBugzilla: document.getElementById("popupEnableBugzilla"),
@@ -13,6 +14,11 @@ document.addEventListener("DOMContentLoaded", () => {
     checkboxes,
     statusElement: document.getElementById("status"),
     showStatus: true
+  });
+
+  MozHelperSettings.bindDependentToggle({
+    parent: checkboxes.enableGmail,
+    child: checkboxes.enableGmailHover
   });
 
   document.getElementById("openOptions").addEventListener("click", () => {

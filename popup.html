@@ -51,6 +51,14 @@
       font-size: 0.95rem;
       margin-bottom: 8px;
     }
+    label.subsetting {
+      margin-left: 18px;
+      font-size: 0.9rem;
+      opacity: 0.9;
+    }
+    label.subsetting.disabled {
+      opacity: 0.5;
+    }
     input[type="checkbox"] {
       width: 16px;
       height: 16px;
@@ -86,6 +94,11 @@
   <label>
     <input type="checkbox" id="popupEnableGmail">
     Gmail Bugzilla linkifier
+  </label>
+
+  <label class="subsetting disabled">
+    <input type="checkbox" id="popupEnableGmailHover" disabled>
+    Show Bugzilla hover cards
   </label>
 
   <label>
