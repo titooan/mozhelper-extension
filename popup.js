@@ -4,6 +4,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const checkboxes = {
     enableGmail: document.getElementById("popupEnableGmail"),
     enablePhabricator: document.getElementById("popupEnablePhabricator"),
+    enablePhabricatorPaste: document.getElementById("popupEnablePhabricatorPaste"),
     enableBugzilla: document.getElementById("popupEnableBugzilla"),
     enableTreeherder: document.getElementById("popupEnableTreeherder")
   };
