@@ -34,6 +34,18 @@ jobs:
       - name: Build extension
         run: npm run build
 
+      - name: Upload to AMO
+        env:
+          AMO_ISSUER: ${{ secrets.AMO_ISSUER }}
+          AMO_SECRET: ${{ secrets.AMO_SECRET }}
+        run: |
+          npx web-ext sign \
+            --source-dir build \
+            --artifacts-dir signed-artifacts \
+            --channel listed \
+            --api-key "$AMO_ISSUER" \
+            --api-secret "$AMO_SECRET"
+
       - name: Create GitHub release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
