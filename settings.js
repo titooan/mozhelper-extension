@@ -6,7 +6,8 @@ const MozHelperSettings = (() => {
     enablePhabricator: true,
     enablePhabricatorPaste: true,
     enableBugzilla: true,
-    enableTreeherder: true
+    enableTreeherder: true,
+    enableTreeherderUnitTests: true
   };
 
   function applyState(checkboxes, values) {

@@ -71,5 +71,11 @@
       "js": ["content/treeherder.js"],
       "run_at": "document_idle"
     }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["icons/tests_icon.png"],
+      "matches": ["<all_urls>"]
+    }
   ]
 }

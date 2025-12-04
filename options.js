@@ -5,7 +5,8 @@ document.addEventListener("DOMContentLoaded", () => {
     enablePhabricator: document.getElementById("enablePhabricator"),
     enablePhabricatorPaste: document.getElementById("enablePhabricatorPaste"),
     enableBugzilla: document.getElementById("enableBugzilla"),
-    enableTreeherder: document.getElementById("enableTreeherder")
+    enableTreeherder: document.getElementById("enableTreeherder"),
+    enableTreeherderUnitTests: document.getElementById("enableTreeherderUnitTests")
   };
 
   MozHelperSettings.initToggles({
