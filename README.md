@@ -11,19 +11,14 @@ Moz Helper Suite is a Firefox add-on that bundles several small productivity fea
 - Phabricator inline video player – detects video artifacts in comments and renders an inline `<video>` player so you can review attachments without downloading them.
 - Phabricator markdown paste helper – highlight text in any remarkup field and paste a link to instantly wrap the selection with `[text](url)` markdown without touching the mouse again.
 - Treeherder Firebase TestLab helper – adds a Firebase button to the Treeherder job summary and navigation bar that fetches the latest TestLab link via Taskcluster.
+- Treeherder unit test shortcut – detects Taskcluster jobs that expose unit-test HTML reports and adds a toolbar icon that jumps directly to the rendered results.
 - Shared settings/popup surfaces – a toolbar popup and options page let you enable or disable each helper individually, with sync storage keeping preferences aligned across browsers.
 
-## Installation
-
-1. Run `npm run build` to produce `mozilla-helper.xpi`.
-2. In Firefox, open `about:config` and enable:
-   - `xpinstall.signatures.required` → `false`
-   - `extensions.experiments.enabled` → `true`
-3. Open `about:addons`, click the gear icon, and choose “Install Add-on From File…”.
-4. Select `mozilla-helper.xpi` from the repository root.
-5. If prompted about new permissions (Bugzilla host access, etc.), accept them.
-
-During development, you can also use `about:debugging#/runtime/this-firefox` → “Load Temporary Add-on…” and pick `manifest.json`.
+<p style="text-align: center;">
+  <a href="https://addons.mozilla.org/firefox/addon/moz-helper-suite/">
+    <img src="icons/getaddon.svg" alt="Get Moz Helper Suite on AMO" width="200">
+  </a>
+</p>
 
 ## Development
 
@@ -40,6 +35,19 @@ npm run build
 ```
 
 `npm run build` cleans previous artifacts, copies assets into `build/`, zips `mozilla-helper.xpi`, and runs `web-ext lint` (with a small diagnostics-channel polyfill) to validate the packaged add-on.
+
+#### Installation
+
+After running the build, you can load the unsigned XPI locally:
+
+1. In Firefox, open `about:config` and set:
+   - `xpinstall.signatures.required` → `false`
+   - `extensions.experiments.enabled` → `true`
+2. Open `about:addons`, click the gear icon, and choose “Install Add-on From File…”.
+3. Select `mozilla-helper.xpi` from the repository root.
+4. Accept any permission prompts (Bugzilla hosts, etc.).
+
+During development, you can also use `about:debugging#/runtime/this-firefox` → “Load Temporary Add-on…” and pick `manifest.json`.
 
 ### Tests
 
