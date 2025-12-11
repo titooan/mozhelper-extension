@@ -4,6 +4,8 @@ document.addEventListener("DOMContentLoaded", () => {
     enableGmailHover: document.getElementById("enableGmailHover"),
     enablePhabricator: document.getElementById("enablePhabricator"),
     enablePhabricatorPaste: document.getElementById("enablePhabricatorPaste"),
+    enablePhabricatorTryLinks: document.getElementById("enablePhabricatorTryLinks"),
+    enablePhabricatorTryCommentIcons: document.getElementById("enablePhabricatorTryCommentIcons"),
     enableBugzilla: document.getElementById("enableBugzilla"),
     enableTreeherder: document.getElementById("enableTreeherder"),
     enableTreeherderUnitTests: document.getElementById("enableTreeherderUnitTests")
@@ -19,4 +21,5 @@ document.addEventListener("DOMContentLoaded", () => {
     parent: checkboxes.enableGmail,
     child: checkboxes.enableGmailHover
   });
+
 });

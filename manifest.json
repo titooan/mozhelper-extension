@@ -40,7 +40,8 @@
   ],
   "host_permissions": [
     "https://*.mozilla.org/*",
-    "https://*.allizom.org/*"
+    "https://*.allizom.org/*",
+    "https://treeherder.mozilla.org/*"
   ],
   "content_scripts": [
     {
