@@ -25,6 +25,10 @@ describe("MozHelperSettings dependent toggles", () => {
     expect(MozHelperSettings.defaultSettings).to.have.property("enableGmailHover", true);
   });
 
+  it("includes per-comment try icon default", () => {
+    expect(MozHelperSettings.defaultSettings).to.have.property("enablePhabricatorTryCommentIcons", true);
+  });
+
   it("disables child checkbox and label when parent unchecked", () => {
     const dom = new JSDOM(`
       <label class="parent">

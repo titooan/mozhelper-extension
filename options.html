@@ -55,16 +55,31 @@
       background: var(--mh-surface-card);
       backdrop-filter: blur(2px);
     }
+    .settings-section {
+      margin-bottom: 20px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid rgba(148, 163, 184, 0.3);
+    }
+    .settings-section:last-child {
+      border-bottom: none;
+      padding-bottom: 0;
+      margin-bottom: 0;
+    }
+    .settings-section h2 {
+      margin: 0 0 12px;
+      font-size: 1rem;
+      color: var(--mh-accent);
+    }
     label {
       display: flex;
       align-items: center;
       gap: 8px;
-      margin-bottom: 12px;
-      font-size: 1rem;
+      margin-bottom: 10px;
+      font-size: 0.98rem;
     }
     label.subsetting {
       margin-left: 24px;
-      font-size: 0.95rem;
+      font-size: 0.92rem;
       opacity: 0.9;
     }
     label.subsetting.disabled {
@@ -91,40 +106,57 @@
   </header>
 
   <div class="card">
-    <label>
-      <input type="checkbox" id="enableGmail">
-      Gmail Bugzilla linkifier
-    </label>
+    <section class="settings-section">
+      <h2>Gmail</h2>
+      <label>
+        <input type="checkbox" id="enableGmail">
+        Gmail Bugzilla linkifier
+      </label>
+      <label class="subsetting disabled">
+        <input type="checkbox" id="enableGmailHover" disabled>
+        Show Bugzilla hover cards
+      </label>
+    </section>
 
-    <label class="subsetting disabled">
-      <input type="checkbox" id="enableGmailHover" disabled>
-      Show Bugzilla hover cards
-    </label>
+    <section class="settings-section">
+      <h2>Phabricator</h2>
+      <label>
+        <input type="checkbox" id="enablePhabricator">
+        Inline video player
+      </label>
+      <label>
+        <input type="checkbox" id="enablePhabricatorPaste">
+        Markdown paste helper
+      </label>
+      <label>
+        <input type="checkbox" id="enablePhabricatorTryLinks">
+        Show latest try link summary
+      </label>
+      <label>
+        <input type="checkbox" id="enablePhabricatorTryCommentIcons">
+        Show try status icons in comments
+      </label>
+    </section>
 
-    <label>
-      <input type="checkbox" id="enablePhabricator">
-      Phabricator inline video player
-    </label>
+    <section class="settings-section">
+      <h2>Bugzilla</h2>
+      <label>
+        <input type="checkbox" id="enableBugzilla">
+        Markdown paste helper
+      </label>
+    </section>
 
-    <label>
-      <input type="checkbox" id="enablePhabricatorPaste">
-      Phabricator markdown paste helper
-    </label>
-
-    <label>
-      <input type="checkbox" id="enableBugzilla">
-      Bugzilla markdown paste helper
-    </label>
-
-    <label>
-      <input type="checkbox" id="enableTreeherder">
-      Treeherder Firebase TestLab helper
-    </label>
-
-    <label>
-      <input type="checkbox" id="enableTreeherderUnitTests">
-      Treeherder unit test results shortcut
-    </label>
+    <section class="settings-section">
+      <h2>Treeherder</h2>
+      <label>
+        <input type="checkbox" id="enableTreeherder">
+        Firebase TestLab helper
+      </label>
+      <label>
+        <input type="checkbox" id="enableTreeherderUnitTests">
+        Unit test results shortcut
+      </label>
+    </section>
 
     <p id="status"></p>
   </div>

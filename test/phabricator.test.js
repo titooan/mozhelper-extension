@@ -4,6 +4,7 @@ import {
   shouldTransformPaste as phabShouldTransformPaste,
   markdownReplace as phabMarkdownReplace
 } from "../src/phabricator/mdPaste.js";
+import { buildFailedJobsTooltip, SUCCESS_TOOLTIP, PENDING_TOOLTIP } from "../src/phabricator/tryStatusTooltip.js";
 
 function phabTransformAllowed(original, start, end, pasted) {
   const selected = original.slice(start, end);
@@ -52,5 +53,37 @@ describe("Phabricator markdown paste helper", () => {
   it("wraps selection with markdown links", () => {
     const replaced = phabMarkdownReplace("hello there", 6, 11, "mozilla.org");
     expect(replaced).to.equal("hello [there](https://mozilla.org)");
+  });
+});
+
+describe("Phabricator try tooltip helper", () => {
+  it("returns null when nothing fails", () => {
+    expect(buildFailedJobsTooltip([])).to.be.null;
+    expect(buildFailedJobsTooltip(null)).to.be.null;
+  });
+
+  it("lists failing jobs with platform and result", () => {
+    const tooltip = buildFailedJobsTooltip([
+      { name: "mochitest", platform: "linux", result: "testfailed" },
+      { jobSymbol: "M1", result: "retry" }
+    ]);
+    expect(tooltip).to.include("Failed jobs:");
+    expect(tooltip).to.include("mochitest (linux) - testfailed");
+    expect(tooltip).to.include("M1 - retry");
+  });
+
+  it("truncates long lists and appends overflow hint", () => {
+    const jobs = Array.from({ length: 15 }, (_, i) => ({ name: `job-${i}`, result: "failed" }));
+    const tooltip = buildFailedJobsTooltip(jobs, 3);
+    expect(tooltip.split("\n")).to.have.length(5); // header + 3 entries + overflow line
+    expect(tooltip).to.match(/…and 12 more/);
+  });
+
+  it("exposes a success tooltip copy", () => {
+    expect(SUCCESS_TOOLTIP).to.equal("Passed");
+  });
+
+  it("exposes a pending tooltip copy", () => {
+    expect(PENDING_TOOLTIP).to.equal("Loading");
   });
 });

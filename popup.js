@@ -6,6 +6,8 @@ document.addEventListener("DOMContentLoaded", () => {
     enableGmailHover: document.getElementById("popupEnableGmailHover"),
     enablePhabricator: document.getElementById("popupEnablePhabricator"),
     enablePhabricatorPaste: document.getElementById("popupEnablePhabricatorPaste"),
+    enablePhabricatorTryLinks: document.getElementById("popupEnablePhabricatorTryLinks"),
+    enablePhabricatorTryCommentIcons: document.getElementById("popupEnablePhabricatorTryCommentIcons"),
     enableBugzilla: document.getElementById("popupEnableBugzilla"),
     enableTreeherder: document.getElementById("popupEnableTreeherder"),
     enableTreeherderUnitTests: document.getElementById("popupEnableTreeherderUnitTests")

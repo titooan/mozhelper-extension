@@ -7,6 +7,7 @@ import {
   buildUnitTestArtifactLink,
   TREEHERDER_TC_BASE
 } from "../src/treeherder/testlab.js";
+import { assessTryJobs } from "../src/treeherder/tryStatus.js";
 
 describe("Treeherder Firebase helper", () => {
   describe("findMatrixArtifact", () => {
@@ -94,5 +95,57 @@ describe("Treeherder Firebase helper", () => {
       expect(buildUnitTestArtifactLink("abc", -1, "thing")).to.be.null;
       expect(buildUnitTestArtifactLink("abc", 0, "")).to.be.null;
     });
+  });
+});
+
+describe("Treeherder try status helper", () => {
+  it("marks run as pending when any job lacks result", () => {
+    const { status, summary } = assessTryJobs([
+      { state: "pending", result: null },
+      { state: "completed", result: "success" }
+    ]);
+    expect(status).to.be.null;
+    expect(summary).to.deep.include({ totalJobs: 2, activeJobs: 1, failedJobs: 0 });
+  });
+
+  it("marks run as failure when a job completes unsuccessfully", () => {
+    const { status, failedJobs } = assessTryJobs([
+      { state: "completed", result: "success" },
+      { state: "completed", result: "testfailed", job_type_name: "mochitest" }
+    ]);
+    expect(status).to.equal("failure");
+    expect(failedJobs).to.have.length(1);
+    expect(failedJobs[0].name).to.equal("mochitest");
+  });
+
+  it("marks run as success when all jobs finish successfully", () => {
+    const result = assessTryJobs([{ result: "success" }, { result: "skipped" }]);
+    expect(result.status).to.equal("success");
+    expect(result.summary).to.deep.include({ totalJobs: 2, activeJobs: 0, failedJobs: 0 });
+  });
+
+  it("treats unknown results as pending rather than failure", () => {
+    const result = assessTryJobs([{ state: "completed", result: "unknown" }]);
+    expect(result.status).to.be.null;
+    expect(result.reason).to.equal("pending");
+    expect(result.summary).to.deep.include({ totalJobs: 1, activeJobs: 1, failedJobs: 0 });
+    expect(result.failedJobs).to.have.length(0);
+  });
+
+  it("still reports failure when a real failure accompanies unknown jobs", () => {
+    const result = assessTryJobs([
+      { state: "completed", result: "unknown" },
+      { state: "completed", result: "failed", job_type_name: "xpcshell" }
+    ]);
+    expect(result.status).to.equal("failure");
+    expect(result.failedJobs).to.have.length(1);
+    expect(result.failedJobs[0].name).to.equal("xpcshell");
+    expect(result.summary.failedJobs).to.equal(1);
+  });
+
+  it("handles malformed inputs", () => {
+    const result = assessTryJobs(null);
+    expect(result.reason).to.equal("missing-jobs");
+    expect(result.summary.totalJobs).to.equal(0);
   });
 });

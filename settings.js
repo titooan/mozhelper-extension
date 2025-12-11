@@ -5,6 +5,8 @@ const MozHelperSettings = (() => {
     enableGmailHover: true,
     enablePhabricator: true,
     enablePhabricatorPaste: true,
+    enablePhabricatorTryLinks: true,
+    enablePhabricatorTryCommentIcons: true,
     enableBugzilla: true,
     enableTreeherder: true,
     enableTreeherderUnitTests: true
