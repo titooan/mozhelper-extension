@@ -41,7 +41,8 @@
   "host_permissions": [
     "https://*.mozilla.org/*",
     "https://*.allizom.org/*",
-    "https://treeherder.mozilla.org/*"
+    "https://treeherder.mozilla.org/*",
+    "https://api.lando.services.mozilla.com/*"
   ],
   "content_scripts": [
     {

@@ -68,7 +68,7 @@ describe("Phabricator try tooltip helper", () => {
       { name: "mochitest", platform: "linux", result: "testfailed" },
       { jobSymbol: "M1", result: "retry" }
     ]);
-    expect(tooltip).to.include("Failed jobs:");
+    expect(tooltip).to.include("Failed jobs: 2");
     expect(tooltip).to.include("mochitest (linux) - testfailed");
     expect(tooltip).to.include("M1 - retry");
   });
@@ -79,11 +79,21 @@ describe("Phabricator try tooltip helper", () => {
     expect(tooltip).to.be.null;
   });
 
-  it("truncates long lists and appends overflow hint", () => {
-    const jobs = Array.from({ length: 15 }, (_, i) => ({ name: `job-${i}`, result: "failed" }));
-    const tooltip = buildFailedJobsTooltip(jobs, 3);
-    expect(tooltip.split("\n")).to.have.length(5); // header + 3 entries + overflow line
-    expect(tooltip).to.match(/…and 12 more/);
+  it("deduplicates job names within the tooltip", () => {
+    const tooltip = buildFailedJobsTooltip([
+      { name: "mochitest", platform: "linux", result: "testfailed" },
+      { jobSymbol: "mochitest", platform: "windows", result: "busted" },
+      { jobSymbol: "web-platform", platform: "linux", result: "busted" }
+    ]);
+    expect(tooltip).to.include("Failed jobs: 3");
+    const mochitestLines = tooltip.split("\n").filter((line) => line.includes("mochitest"));
+    expect(mochitestLines).to.have.length(1);
+  });
+
+  it("only shows the summary line when more than five jobs fail", () => {
+    const jobs = Array.from({ length: 7 }, (_, i) => ({ name: `job-${i}`, result: "failed" }));
+    const tooltip = buildFailedJobsTooltip(jobs);
+    expect(tooltip).to.equal("Failed jobs: 7");
   });
 
   it("exposes a success tooltip copy", () => {

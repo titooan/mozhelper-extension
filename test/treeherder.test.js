@@ -100,12 +100,14 @@ describe("Treeherder Firebase helper", () => {
 
 describe("Treeherder try status helper", () => {
   it("marks run as pending when any job lacks result", () => {
-    const { status, summary } = assessTryJobs([
+    const result = assessTryJobs([
       { state: "pending", result: null },
       { state: "completed", result: "success" }
     ]);
-    expect(status).to.be.null;
-    expect(summary).to.deep.include({ totalJobs: 2, activeJobs: 1, failedJobs: 0 });
+    expect(result.status).to.be.null;
+    expect(result.summary).to.deep.include({ totalJobs: 2, activeJobs: 1, failedJobs: 0 });
+    expect(result.pendingJobs).to.have.length(1);
+    expect(result.pendingJobs[0].state).to.equal("pending");
   });
 
   it("marks run as failure when a job completes unsuccessfully", () => {
@@ -162,12 +164,13 @@ describe("Treeherder try status helper", () => {
     expect(result.failedJobs).to.have.length(0);
   });
 
-  it("still reports failure when a real failure accompanies unknown jobs", () => {
+  it("keeps pending status when failures exist alongside unknown jobs", () => {
     const result = assessTryJobs([
       { state: "completed", result: "unknown" },
       { state: "completed", result: "failed", job_type_name: "xpcshell" }
     ]);
-    expect(result.status).to.equal("failure");
+    expect(result.status).to.be.null;
+    expect(result.reason).to.equal("pending");
     expect(result.failedJobs).to.have.length(1);
     expect(result.failedJobs[0].name).to.equal("xpcshell");
     expect(result.summary.failedJobs).to.equal(1);
@@ -177,5 +180,18 @@ describe("Treeherder try status helper", () => {
     const result = assessTryJobs(null);
     expect(result.reason).to.equal("missing-jobs");
     expect(result.summary.totalJobs).to.equal(0);
+  });
+
+  it("tracks diagnostics for deduped and ignored jobs", () => {
+    const result = assessTryJobs([
+      { job_type_name: "mochitest", state: "completed", result: "success", start_timestamp: 100 },
+      { job_type_name: "mochitest", state: "completed", result: "success", start_timestamp: 200 },
+      { job_type_name: "web-platform", state: "retry", result: "" }
+    ]);
+    expect(result.summary.uniqueJobs).to.equal(1);
+    expect(result.summary.consideredJobs).to.equal(2);
+    expect(result.summary.dedupedJobs).to.equal(1);
+    expect(result.summary.ignoredRetries).to.equal(1);
+    expect(result.summary.ignoredJobs).to.equal(1);
   });
 });
