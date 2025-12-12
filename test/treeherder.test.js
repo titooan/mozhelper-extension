@@ -124,6 +124,25 @@ describe("Treeherder try status helper", () => {
     expect(result.summary).to.deep.include({ totalJobs: 2, activeJobs: 0, failedJobs: 0 });
   });
 
+  it("ignores earlier failures when a later retry succeeds for the same job", () => {
+    const result = assessTryJobs([
+      { job_type_name: "mochitest", platform: "linux", state: "completed", result: "testfailed", start_timestamp: 100 },
+      { job_type_name: "mochitest", platform: "linux", state: "completed", result: "success", start_timestamp: 200 }
+    ]);
+    expect(result.status).to.equal("success");
+    expect(result.failedJobs).to.have.length(0);
+  });
+
+  it("treats the latest run as authoritative when it fails after an earlier success", () => {
+    const result = assessTryJobs([
+      { job_type_name: "mochitest", platform: "linux", state: "completed", result: "success", start_timestamp: 100 },
+      { job_type_name: "mochitest", platform: "linux", state: "completed", result: "testfailed", start_timestamp: 300 }
+    ]);
+    expect(result.status).to.equal("failure");
+    expect(result.failedJobs).to.have.length(1);
+    expect(result.failedJobs[0].name).to.equal("mochitest");
+  });
+
   it("ignores jobs that are retried when assessing status", () => {
     const result = assessTryJobs([
       { state: "completed", result: "success" },
