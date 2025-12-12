@@ -124,6 +124,17 @@ describe("Treeherder try status helper", () => {
     expect(result.summary).to.deep.include({ totalJobs: 2, activeJobs: 0, failedJobs: 0 });
   });
 
+  it("ignores jobs that are retried when assessing status", () => {
+    const result = assessTryJobs([
+      { state: "completed", result: "success" },
+      { state: "retry", result: "", job_type_name: "needs retry" },
+      { state: "completed", result: "retry", job_type_name: "mochitest" }
+    ]);
+    expect(result.status).to.equal("success");
+    expect(result.summary).to.deep.include({ totalJobs: 3, activeJobs: 0, failedJobs: 0 });
+    expect(result.failedJobs).to.have.length(0);
+  });
+
   it("treats unknown results as pending rather than failure", () => {
     const result = assessTryJobs([{ state: "completed", result: "unknown" }]);
     expect(result.status).to.be.null;

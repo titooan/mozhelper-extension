@@ -5,6 +5,7 @@ import {
   markdownReplace as phabMarkdownReplace
 } from "../src/phabricator/mdPaste.js";
 import { buildFailedJobsTooltip, SUCCESS_TOOLTIP, PENDING_TOOLTIP } from "../src/phabricator/tryStatusTooltip.js";
+import { assessTryJobs } from "../src/treeherder/tryStatus.js";
 
 function phabTransformAllowed(original, start, end, pasted) {
   const selected = original.slice(start, end);
@@ -70,6 +71,12 @@ describe("Phabricator try tooltip helper", () => {
     expect(tooltip).to.include("Failed jobs:");
     expect(tooltip).to.include("mochitest (linux) - testfailed");
     expect(tooltip).to.include("M1 - retry");
+  });
+
+  it("does not list retry jobs when fed Treeherder data", () => {
+    const { failedJobs } = assessTryJobs([{ state: "retry", result: "" }]);
+    const tooltip = buildFailedJobsTooltip(failedJobs);
+    expect(tooltip).to.be.null;
   });
 
   it("truncates long lists and appends overflow hint", () => {
