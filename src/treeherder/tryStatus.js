@@ -3,6 +3,7 @@ const TRY_ACTIVE_STATES = new Set(["pending", "running", "coalesced", "queued"])
 const TRY_PENDING_RESULTS = new Set(["unknown"]);
 const TRY_IGNORED_RESULTS = new Set(["retry"]);
 const TRY_IGNORED_STATES = new Set(["retry"]);
+const MAX_PENDING_DEBUG = 15;
 
 function parseJobTimestamp(value) {
   if (value == null) return null;
@@ -70,8 +71,23 @@ function buildJobKey(job, index) {
   return platform ? `${baseKey}::${platform}` : baseKey;
 }
 
-function normalizeJobEntry(job, index) {
+function describeJob(job, state, result) {
+  return {
+    name: job?.job_type_name || job?.ref_data_name || job?.job_symbol || job?.group_symbol || `job ${job?.id ?? ""}`,
+    platform: job?.platform || job?.machine_platform || null,
+    state,
+    result,
+    jobId: job?.id ?? null,
+    taskId: job?.task_id ?? null,
+    jobSymbol: job?.job_symbol ?? null,
+    groupSymbol: job?.group_symbol ?? null,
+    startTimestamp: job?.start_timestamp ?? job?.startTime ?? job?.start_time ?? null
+  };
+}
+
+function normalizeJobEntry(job, index, stats) {
   if (!job || typeof job !== "object") {
+    if (stats) stats.ignoredMalformedJobs += 1;
     return null;
   }
   const stateRaw = job?.state;
@@ -84,6 +100,7 @@ function normalizeJobEntry(job, index) {
   const stateIsIgnored = state && TRY_IGNORED_STATES.has(state);
   const resultIsIgnored = hasResult && TRY_IGNORED_RESULTS.has(result);
   if (stateIsIgnored || resultIsIgnored) {
+    if (stats) stats.ignoredRetryJobs += 1;
     return null;
   }
   return {
@@ -123,17 +140,28 @@ export function assessTryJobs(jobs) {
       status: null,
       reason: "missing-jobs",
       summary: { totalJobs: 0, activeJobs: 0, failedJobs: 0 },
-      failedJobs: []
+      failedJobs: [],
+      pendingJobs: []
     };
   }
   let activeJobs = 0;
-  const failedJobs = [];
+  let failedJobs = 0;
+  const diagnostics = {
+    ignoredRetryJobs: 0,
+    ignoredMalformedJobs: 0,
+    normalizedJobs: 0,
+    dedupedJobs: 0
+  };
+  const failedJobDetails = [];
+  const pendingJobDetails = [];
   const latestJobs = new Map();
   jobs.forEach((job, index) => {
-    const entry = normalizeJobEntry(job, index);
+    const entry = normalizeJobEntry(job, index, diagnostics);
     if (!entry) return;
+    diagnostics.normalizedJobs += 1;
     const existing = latestJobs.get(entry.key);
     if (isLaterJobEntry(entry, existing)) {
+      if (existing) diagnostics.dedupedJobs += 1;
       latestJobs.set(entry.key, entry);
     }
   });
@@ -141,35 +169,36 @@ export function assessTryJobs(jobs) {
     const { job, state, result, hasResult, resultIsPending, stateIsPending } = entry;
     if (!hasResult || stateIsPending || resultIsPending) {
       activeJobs += 1;
+      if (pendingJobDetails.length < MAX_PENDING_DEBUG) {
+        pendingJobDetails.push(describeJob(job, state, result));
+      }
     }
     if (hasResult && !TRY_SUCCESS_RESULTS.has(result) && !resultIsPending) {
-      failedJobs.push({
-        name: job?.job_type_name || job?.ref_data_name || job?.job_symbol || job?.group_symbol || `job ${job?.id ?? ""}`,
-        platform: job?.platform || job?.machine_platform || null,
-        state,
-        result,
-        jobId: job?.id ?? null,
-        taskId: job?.task_id ?? null,
-        jobSymbol: job?.job_symbol ?? null,
-        groupSymbol: job?.group_symbol ?? null
-      });
+      failedJobs += 1;
+      failedJobDetails.push(describeJob(job, state, result));
     }
   }
   const summary = {
     totalJobs: jobs.length,
     activeJobs,
-    failedJobs: failedJobs.length
+    failedJobs,
+    uniqueJobs: latestJobs.size,
+    consideredJobs: diagnostics.normalizedJobs,
+    dedupedJobs: diagnostics.dedupedJobs,
+    ignoredJobs: diagnostics.ignoredRetryJobs + diagnostics.ignoredMalformedJobs,
+    ignoredRetries: diagnostics.ignoredRetryJobs,
+    ignoredMalformed: diagnostics.ignoredMalformedJobs
   };
   if (!jobs.length) {
-    return { status: null, reason: "no-jobs", summary, failedJobs };
-  }
-  if (failedJobs.length > 0) {
-    return { status: "failure", reason: null, summary, failedJobs };
+    return { status: null, reason: "no-jobs", summary, failedJobs: failedJobDetails, pendingJobs: pendingJobDetails };
   }
   if (activeJobs > 0) {
-    return { status: null, reason: "pending", summary, failedJobs };
+    return { status: null, reason: "pending", summary, failedJobs: failedJobDetails, pendingJobs: pendingJobDetails };
   }
-  return { status: "success", reason: null, summary, failedJobs };
+  if (failedJobs > 0) {
+    return { status: "failure", reason: null, summary, failedJobs: failedJobDetails, pendingJobs: pendingJobDetails };
+  }
+  return { status: "success", reason: null, summary, failedJobs: failedJobDetails, pendingJobs: pendingJobDetails };
 }
 
 export { TRY_SUCCESS_RESULTS, TRY_ACTIVE_STATES };

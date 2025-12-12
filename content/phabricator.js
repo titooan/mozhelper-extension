@@ -167,7 +167,13 @@ function phabClearTryLinkEntry(list) {
 
 function phabRemoveCommentTryIcon(anchor) {
   if (!anchor) return;
-  const icon = PHAB_COMMENT_TRY_ICONS.get(anchor);
+  let icon = PHAB_COMMENT_TRY_ICONS.get(anchor);
+  if (!icon) {
+    const prev = anchor.previousElementSibling;
+    if (prev && prev.dataset?.phabTryCommentIcon === "true") {
+      icon = prev;
+    }
+  }
   if (icon) {
     if (icon.dataset.phabTryTooltip && phabTryTooltipNode?.textContent === icon.dataset.phabTryTooltip) {
       phabHideTryTooltip();
@@ -183,6 +189,13 @@ function phabApplyCommentTryStatus(anchor, statusInfo) {
   const status = statusInfo?.status ?? null;
   const isPending = !status && statusInfo?.reason === "pending";
   let icon = PHAB_COMMENT_TRY_ICONS.get(anchor);
+  if (!icon) {
+    const prev = anchor.previousElementSibling;
+    if (prev && prev.dataset?.phabTryCommentIcon === "true") {
+      icon = prev;
+      PHAB_COMMENT_TRY_ICONS.set(anchor, icon);
+    }
+  }
   if (!status && !isPending) {
     if (icon) {
       icon.remove();
@@ -326,14 +339,14 @@ function phabProcessCommentTryLinks() {
       phabRemoveCommentTryIcon(anchor);
       return;
     }
-    const { repo, revision } = phabParseTryLinkParams(parsedUrl);
-    if (!repo || !revision) {
+    const { repo, revision, landoCommitId } = phabParseTryLinkParams(parsedUrl);
+    if (!repo || (!revision && !landoCommitId)) {
       phabRemoveCommentTryIcon(anchor);
       return;
     }
-    const key = `${repo}:${revision}`;
+    const key = `${repo}:${revision || `lando:${landoCommitId}`}`;
     anchor.dataset.phabTryCommentKey = key;
-    phabGetTryResult(repo, revision)
+    phabGetTryResult(repo, revision, landoCommitId)
       .then((statusInfo) => {
         if (!phabTryCommentIconsEnabled) return;
         if (!anchor.isConnected || anchor.dataset.phabTryCommentKey !== key) {
@@ -350,30 +363,28 @@ function phabBuildFailedJobsTooltip(failedJobs) {
   if (!Array.isArray(failedJobs) || failedJobs.length === 0) {
     return null;
   }
-  const MAX_ITEMS = 12;
+  const maxSummary = 5;
   const lines = [];
+  const seenNames = new Set();
   for (const job of failedJobs) {
-    if (lines.length >= MAX_ITEMS) break;
+    if (lines.length >= maxSummary) break;
     const parts = [];
     const name = job?.name || job?.jobSymbol || job?.groupSymbol || job?.jobId || "Job";
+    const nameKey = name.toLowerCase();
+    if (seenNames.has(nameKey)) continue;
+    seenNames.add(nameKey);
     const platform = job?.platform;
     const result = job?.result;
     parts.push(name);
-    if (platform) {
-      parts.push(`(${platform})`);
-    }
-    if (result) {
-      parts.push(`- ${result}`);
-    }
+    if (platform) parts.push(`(${platform})`);
+    if (result) parts.push(`- ${result}`);
     lines.push(parts.join(" "));
   }
-  if (!lines.length) {
-    return null;
+  const summaryLine = `Failed jobs: ${failedJobs.length}`;
+  if (failedJobs.length <= maxSummary && lines.length) {
+    return `${summaryLine}\n${lines.join("\n")}`;
   }
-  if (failedJobs.length > MAX_ITEMS) {
-    lines.push(`…and ${failedJobs.length - MAX_ITEMS} more`);
-  }
-  return `Failed jobs:\n${lines.join("\n")}`;
+  return summaryLine;
 }
 
 function phabApplyTryStatusIcon(list, statusInfo) {
@@ -384,6 +395,14 @@ function phabApplyTryStatusIcon(list, statusInfo) {
   const status = statusInfo?.status ?? null;
   const isPending = !status && statusInfo?.reason === "pending";
   if (!status && !isPending) {
+    if (statusInfo) {
+      console.debug("[MozHelper][Phabricator] Try status unresolved (no icon)", {
+        reason: statusInfo?.reason ?? null,
+        summary: statusInfo?.summary ?? null,
+        pendingJobs: statusInfo?.pendingJobs ?? null,
+        failedJobs: statusInfo?.failedJobs ?? null
+      });
+    }
     if (icon) icon.remove();
     phabHideTryTooltip();
     return;
@@ -421,6 +440,11 @@ function phabApplyTryStatusIcon(list, statusInfo) {
     icon.removeAttribute("title");
     delete icon.dataset.phabTryTooltip;
   }
+  console.debug("[MozHelper][Phabricator] Try status icon updated", {
+    status,
+    pending: isPending,
+    hasIcon: Boolean(icon)
+  });
 }
 
 function phabRenderTryLinkEntry(list, data) {
@@ -455,18 +479,27 @@ function phabRenderTryLinkEntry(list, data) {
 }
 
 function phabParseTryLinkParams(url) {
-  if (!url) return { repo: null, revision: null };
+  if (!url) return { repo: null, revision: null, landoCommitId: null };
   let repo = url.searchParams.get("repo");
   let revision = url.searchParams.get("revision");
-  if ((!repo || !revision) && url.hash && url.hash.includes("?")) {
+  let landoCommitId = url.searchParams.get("landoCommitID") || url.searchParams.get("lando_commit_id");
+  if ((!repo || !revision || !landoCommitId) && url.hash && url.hash.includes("?")) {
     const hashQuery = url.hash.slice(url.hash.indexOf("?") + 1);
     const hashParams = new URLSearchParams(hashQuery);
     if (!repo) repo = hashParams.get("repo");
     if (!revision) revision = hashParams.get("revision");
+    if (!landoCommitId) landoCommitId = hashParams.get("landoCommitID") || hashParams.get("lando_commit_id");
+  }
+  if (!landoCommitId) {
+    const fragMatch = /landoCommitID=(\d+)/i.exec(url.href);
+    if (fragMatch) {
+      landoCommitId = fragMatch[1];
+    }
   }
   return {
     repo: repo || null,
-    revision: revision || null
+    revision: revision || null,
+    landoCommitId: landoCommitId || null
   };
 }
 
@@ -490,38 +523,46 @@ function phabFindLatestTryLinkData() {
         return null;
       }
     })();
-    const { repo, revision } = parsedUrl ? phabParseTryLinkParams(parsedUrl) : { repo: null, revision: null };
+    const { repo, revision, landoCommitId } = parsedUrl
+      ? phabParseTryLinkParams(parsedUrl)
+      : { repo: null, revision: null, landoCommitId: null };
     const anchor = eventNode.querySelector(".phabricator-anchor-view[id], .phabricator-anchor-view[name]");
     const anchorId = anchor?.id || anchor?.getAttribute("name");
     latest = {
       url: tryLink.href,
       commentUrl: anchorId ? `${baseUrl}#${anchorId}` : null,
       repo,
-      revision
+      revision,
+      landoCommitId
     };
   });
 
   return latest;
 }
 
-function phabGetTryResult(repo, revision) {
-  if (!repo || !revision || !phabRuntime?.runtime?.sendMessage) {
+function phabGetTryResult(repo, revision, landoCommitId) {
+  if (!repo || (!revision && !landoCommitId) || !phabRuntime?.runtime?.sendMessage) {
     return Promise.resolve(null);
   }
-  const key = `${repo}:${revision}`;
+  const cacheKey = `${repo}:${revision || `lando:${landoCommitId}`}`;
+  if (PHAB_TRY_STATUS_CACHE.has(cacheKey)) {
+    return PHAB_TRY_STATUS_CACHE.get(cacheKey);
+  }
+  const key = cacheKey;
   if (PHAB_TRY_STATUS_CACHE.has(key)) {
     return PHAB_TRY_STATUS_CACHE.get(key);
   }
-  console.debug("[MozHelper][Phabricator] Requesting try status", { repo, revision });
+  console.debug("[MozHelper][Phabricator] Requesting try status", { repo, revision, landoCommitId });
   const promise = phabRuntime.runtime
     .sendMessage({
       type: "moz-helper:getTryStatus",
       repo,
-      revision
+      revision,
+      landoCommitId
     })
     .then((response) => {
       const status = response?.status ?? null;
-      console.debug("[MozHelper][Phabricator] Try status response", { repo, revision, response });
+      console.debug("[MozHelper][Phabricator] Try status response", { repo, revision, landoCommitId, response });
       if (!status) {
         console.debug("[MozHelper][Phabricator] Try status unresolved", {
           repo,
@@ -542,31 +583,52 @@ function phabGetTryResult(repo, revision) {
 }
 
 function phabUpdateLatestTryLink() {
+  console.debug("[MozHelper][Phabricator] Updating try link entry");
   const list = phabFindDiffDetailList();
-  if (!list) return;
+  if (!list) {
+    console.debug("[MozHelper][Phabricator] Try property list missing");
+    return;
+  }
 
   if (!phabTryLinkEnabled) {
+    console.debug("[MozHelper][Phabricator] Try link feature disabled");
     phabClearTryLinkEntry(list);
     return;
   }
 
   const data = phabFindLatestTryLinkData();
   if (!data) {
+    console.debug("[MozHelper][Phabricator] No try link detected");
     phabClearTryLinkEntry(list);
     return;
   }
 
+  console.debug("[MozHelper][Phabricator] Found try link", data);
   phabRenderTryLinkEntry(list, data);
 
-  if (data.repo && data.revision) {
+  if (data.repo && (data.revision || data.landoCommitId)) {
     phabApplyTryStatusIcon(list, null);
-    phabGetTryResult(data.repo, data.revision)
+    console.debug("[MozHelper][Phabricator] Fetching try status for latest link", {
+      repo: data.repo,
+      revision: data.revision,
+      landoCommitId: data.landoCommitId ?? null
+    });
+    phabGetTryResult(data.repo, data.revision, data.landoCommitId)
       .then((statusInfo) => {
         if (!phabTryLinkEnabled) return;
+        console.debug("[MozHelper][Phabricator] Try status resolved", {
+          repo: data.repo,
+          revision: data.revision,
+          landoCommitId: data.landoCommitId ?? null,
+          status: statusInfo?.status ?? null,
+          reason: statusInfo?.reason ?? null,
+          summary: statusInfo?.summary ?? null
+        });
         phabApplyTryStatusIcon(list, statusInfo);
       })
       .catch(() => {});
   } else {
+    console.debug("[MozHelper][Phabricator] Try link missing repo or revision", data);
     phabApplyTryStatusIcon(list, null);
   }
 }
