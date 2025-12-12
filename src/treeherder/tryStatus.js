@@ -1,6 +1,8 @@
 const TRY_SUCCESS_RESULTS = new Set(["success", "skipped"]);
 const TRY_ACTIVE_STATES = new Set(["pending", "running", "coalesced", "queued"]);
 const TRY_PENDING_RESULTS = new Set(["unknown"]);
+const TRY_IGNORED_RESULTS = new Set(["retry"]);
+const TRY_IGNORED_STATES = new Set(["retry"]);
 
 /**
  * Mirrors assessTryJobs in background.js for easier testing.
@@ -26,6 +28,11 @@ export function assessTryJobs(jobs) {
     const hasResult = result !== null && result !== "";
     const resultIsPending = hasResult && TRY_PENDING_RESULTS.has(result);
     const stateIsPending = state && TRY_ACTIVE_STATES.has(state);
+    const stateIsIgnored = state && TRY_IGNORED_STATES.has(state);
+    const resultIsIgnored = hasResult && TRY_IGNORED_RESULTS.has(result);
+    if (stateIsIgnored || resultIsIgnored) {
+      continue;
+    }
     if (!hasResult || stateIsPending || resultIsPending) {
       activeJobs += 1;
     }
