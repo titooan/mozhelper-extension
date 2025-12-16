@@ -1,5 +1,6 @@
 export {
   shouldTransformPaste,
   markdownTransform,
-  markdownReplace
+  markdownReplace,
+  getMarkdownPasteUpdate
 } from "../bugzilla/mdPaste.js";

@@ -1,5 +1,10 @@
 import { expect } from "chai";
-import { shouldTransformPaste, markdownReplace, markdownTransform } from "../src/bugzilla/mdPaste.js";
+import {
+  shouldTransformPaste,
+  markdownReplace,
+  markdownTransform,
+  getMarkdownPasteUpdate
+} from "../src/bugzilla/mdPaste.js";
 
 function transformAllowed(original, start, end, pasted) {
   const selected = original.slice(start, end);
@@ -49,5 +54,115 @@ describe("Bugzilla markdown paste", () => {
     const result = markdownTransform("hello world", 0, 5, "https://mozilla.org");
     expect(result.text).to.equal("[hello](https://mozilla.org) world");
     expect(result.caret).to.equal("[hello](https://mozilla.org)".length);
+  });
+  it("replaces selection with clipboard hyperlink text when pasted content is not a naked URL", () => {
+    const original = "needs label update";
+    const start = original.indexOf("label");
+    const end = start + "label".length;
+    const html = '<a href="https://example.com/try">Bug 123</a>';
+    const result = getMarkdownPasteUpdate({
+      original,
+      selectionStart: start,
+      selectionEnd: end,
+      selectedText: "label",
+      plainText: "Bug 123",
+      htmlText: html
+    });
+    expect(result.text).to.equal("needs [Bug 123](https://example.com/try) update");
+  });
+  it("inserts markdown links when no text is selected but clipboard contains a link", () => {
+    const original = "prefix ";
+    const html = '<a href="https://mozilla.org/foo">Bug 456</a>';
+    const result = getMarkdownPasteUpdate({
+      original,
+      selectionStart: original.length,
+      selectionEnd: original.length,
+      selectedText: "",
+      plainText: "Bug 456",
+      htmlText: html
+    });
+    expect(result.text).to.equal("prefix [Bug 456](https://mozilla.org/foo)");
+  });
+  it("replaces selections with entire clipboard fragments when they include links plus text", () => {
+    const original = "needs label update";
+    const start = original.indexOf("label");
+    const end = start + "label".length;
+    const html = "<!--StartFragment-->text <a href=\"https://example.com/try\">link</a> end<!--EndFragment-->";
+    const result = getMarkdownPasteUpdate({
+      original,
+      selectionStart: start,
+      selectionEnd: end,
+      selectedText: "label",
+      plainText: "text link end",
+      htmlText: html
+    });
+    expect(result.text).to.equal("needs text [link](https://example.com/try) end update");
+  });
+  it("falls back to default pasting when clipboard text is regular prose", () => {
+    const original = "needs label update";
+    const start = original.indexOf("label");
+    const end = start + "label".length;
+    const result = getMarkdownPasteUpdate({
+      original,
+      selectionStart: start,
+      selectionEnd: end,
+      selectedText: "label",
+      plainText: "Bug 123 details",
+      htmlText: ""
+    });
+    expect(result).to.be.null;
+  });
+  it("does not treat mixed text containing URLs as a bare URL paste", () => {
+    const original = "needs label update";
+    const start = original.indexOf("label");
+    const end = start + "label".length;
+    const text = "More info: https://example.com/details";
+    const result = getMarkdownPasteUpdate({
+      original,
+      selectionStart: start,
+      selectionEnd: end,
+      selectedText: "label",
+      plainText: text,
+      htmlText: ""
+    });
+    expect(result).to.be.null;
+  });
+  it("ignores clipboard HTML without links", () => {
+    const original = "prefix ";
+    const result = getMarkdownPasteUpdate({
+      original,
+      selectionStart: original.length,
+      selectionEnd: original.length,
+      selectedText: "",
+      plainText: "Bug",
+      htmlText: "<div>Bug</div>"
+    });
+    expect(result).to.be.null;
+  });
+  it("inlines clipboard fragments that contain surrounding text and links", () => {
+    const original = "prefix ";
+    const html = "<!--StartFragment-->text <a href=\"https://example.com/try\">link</a> end<!--EndFragment-->";
+    const result = getMarkdownPasteUpdate({
+      original,
+      selectionStart: original.length,
+      selectionEnd: original.length,
+      selectedText: "",
+      plainText: "text link end",
+      htmlText: html
+    });
+    expect(result.text).to.equal("prefix text [link](https://example.com/try) end");
+  });
+  it("preserves multiple links inside a clipboard fragment", () => {
+    const original = "";
+    const html = "<!--StartFragment-->one <a href=\"example.com/a\">alpha</a> and <a href=\"https://example.com/b\">beta</a><!--EndFragment-->";
+    const result = getMarkdownPasteUpdate({
+      original,
+      selectionStart: 0,
+      selectionEnd: 0,
+      selectedText: "",
+      plainText: "one alpha and beta",
+      htmlText: html
+    });
+    expect(result.text).to.equal("one [alpha](https://example.com/a) and [beta](https://example.com/b)");
   });
 });
