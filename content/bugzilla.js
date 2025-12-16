@@ -34,17 +34,79 @@ function bugzillaSelectionOverlapsMarkdown(text, selectionStart, selectionEnd) {
   return false;
 }
 
-function bugzillaShouldTransformPaste(original, selectionStart, selectionEnd, selectedText, pastedText) {
-  if (!selectedText || !pastedText) return false;
-  if (!bugzillaIsLikelyURL(pastedText)) return false;
-  if (bugzillaIsLikelyURL(selectedText)) return false;
-  if (bugzillaSelectionOverlapsMarkdown(original, selectionStart, selectionEnd)) return false;
-  return true;
+function bugzillaExtractHtmlFragment(htmlText) {
+  if (!htmlText) return "";
+  const startMarker = "<!--StartFragment-->";
+  const endMarker = "<!--EndFragment-->";
+  const startIdx = htmlText.indexOf(startMarker);
+  const endIdx = htmlText.indexOf(endMarker);
+  if (startIdx !== -1 && endIdx !== -1 && endIdx > startIdx) {
+    return htmlText.slice(startIdx + startMarker.length, endIdx);
+  }
+  return htmlText;
 }
 
-function bugzillaMarkdownTransform(original, selectionStart, selectionEnd, pastedURL) {
+function bugzillaDecodeEntities(text) {
+  if (!text) return "";
+  return text
+    .replace(/&#x([0-9a-f]+);/gi, (_, hex) => String.fromCharCode(parseInt(hex, 16)))
+    .replace(/&#(\d+);/g, (_, dec) => String.fromCharCode(parseInt(dec, 10)))
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&amp;/gi, "&")
+    .replace(/&quot;/gi, "\"")
+    .replace(/&apos;/gi, "'")
+    .replace(/&nbsp;/gi, " ");
+}
+
+function bugzillaStripHtmlPreservingText(text) {
+  if (!text) return "";
+  let output = text.replace(/<br\s*\/?>/gi, "\n");
+  output = output.replace(/<\/(p|div|li|ul|ol|tr|table|blockquote)>/gi, "\n");
+  output = output.replace(/<[^>]+>/g, "");
+  output = output.replace(/\r\n/g, "\n");
+  output = bugzillaDecodeEntities(output);
+  return output.replace(/\u00a0/g, " ");
+}
+
+function bugzillaParseClipboardHTML(htmlText) {
+  if (!htmlText) return null;
+  const fragment = bugzillaExtractHtmlFragment(htmlText);
+  if (!fragment) return null;
+  let containsLink = false;
+  let firstLinkURL = null;
+  let firstLinkText = null;
+  const anchorRegex = /<a\b([^>]*)>([\s\S]*?)<\/a>/gi;
+  let replaced = fragment.replace(anchorRegex, (match, attrPart, inner) => {
+    const hrefMatch = attrPart.match(/href\s*=\s*["']([^"']+)["']/i);
+    if (!hrefMatch) return bugzillaStripHtmlPreservingText(inner);
+    const rawHref = hrefMatch[1]?.trim();
+    if (!rawHref || !bugzillaIsLikelyURL(rawHref)) {
+      return bugzillaStripHtmlPreservingText(inner);
+    }
+    const cleanURL = /^https?:\/\//i.test(rawHref) ? rawHref : `https://${rawHref}`;
+    const anchorText = bugzillaStripHtmlPreservingText(inner).replace(/\s+/g, " ").trim();
+    if (!anchorText) return "";
+    if (!firstLinkURL) {
+      firstLinkURL = cleanURL;
+      firstLinkText = anchorText;
+    }
+    containsLink = true;
+    return `[${anchorText}](${cleanURL})`;
+  });
+  replaced = bugzillaStripHtmlPreservingText(replaced);
+  if (!replaced.trim()) return containsLink ? { text: "", containsLink, firstLinkURL, firstLinkText } : null;
+  return {
+    text: replaced,
+    containsLink,
+    firstLinkURL,
+    firstLinkText
+  };
+}
+
+function bugzillaMarkdownTransform(original, selectionStart, selectionEnd, pastedURL, replacementText = null) {
   const before = original.slice(0, selectionStart);
-  const selected = original.slice(selectionStart, selectionEnd);
+  const selected = replacementText != null ? replacementText : original.slice(selectionStart, selectionEnd);
   const after = original.slice(selectionEnd);
   const cleanURL = /^https?:\/\//i.test(pastedURL) ? pastedURL : `https://${pastedURL}`;
   const markdown = `[${selected}](${cleanURL})`;
@@ -55,6 +117,39 @@ function bugzillaMarkdownTransform(original, selectionStart, selectionEnd, paste
 
 function bugzillaMarkdownReplace(original, selectionStart, selectionEnd, pastedURL) {
   return bugzillaMarkdownTransform(original, selectionStart, selectionEnd, pastedURL).text;
+}
+
+function bugzillaInsertText(original, selectionStart, selectionEnd, insertion) {
+  const before = original.slice(0, selectionStart);
+  const after = original.slice(selectionEnd);
+  const text = before + insertion + after;
+  const caret = before.length + insertion.length;
+  return { text, caret };
+}
+
+function bugzillaGetPasteUpdate(original, selectionStart, selectionEnd, selectedText, plainText, htmlText) {
+  if (bugzillaSelectionOverlapsMarkdown(original, selectionStart, selectionEnd)) return null;
+  const selection = selectedText ?? "";
+  const hasSelection = selection.length > 0;
+  const htmlInfo = bugzillaParseClipboardHTML(htmlText);
+  const plainIsURL = plainText ? bugzillaIsLikelyURL(plainText) : false;
+
+  if (hasSelection) {
+    if (bugzillaIsLikelyURL(selection)) return null;
+    if (plainIsURL) {
+      return bugzillaMarkdownTransform(original, selectionStart, selectionEnd, plainText);
+    }
+    if (htmlInfo?.containsLink && htmlInfo.text) {
+      return bugzillaInsertText(original, selectionStart, selectionEnd, htmlInfo.text);
+    }
+    return null;
+  }
+
+  if (htmlInfo?.containsLink && htmlInfo.text) {
+    return bugzillaInsertText(original, selectionStart, selectionEnd, htmlInfo.text);
+  }
+
+  return null;
 }
 
 const bugzillaStorage = (typeof browser !== "undefined" ? browser.storage : chrome.storage);
@@ -69,19 +164,20 @@ function bugzillaHandlePaste(event) {
 
   const start = target.selectionStart;
   const end = target.selectionEnd;
-  if (start == null || end == null || start === end) return;
+  if (start == null || end == null) return;
 
   const clipboard = event.clipboardData || window.clipboardData;
   if (!clipboard) return;
   const pasted = (clipboard.getData("text/plain") || "").trim();
+  const html = clipboard.getData("text/html") || "";
   const selected = target.value.slice(start, end);
 
-  if (!bugzillaShouldTransformPaste(target.value, start, end, selected, pasted)) return;
+  const update = bugzillaGetPasteUpdate(target.value, start, end, selected, pasted, html);
+  if (!update) return;
 
   event.preventDefault();
-  const { text, caret } = bugzillaMarkdownTransform(target.value, start, end, pasted);
-  target.value = text;
-  target.setSelectionRange(caret, caret);
+  target.value = update.text;
+  target.setSelectionRange(update.caret, update.caret);
   target.dispatchEvent(new Event("input", { bubbles: true }));
 }
 
