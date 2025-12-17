@@ -1,4 +1,5 @@
 import { expect } from "chai";
+import { JSDOM } from "jsdom";
 import { isVideoUrl } from "../src/phabricator/videoEnhancer.js";
 import {
   shouldTransformPaste as phabShouldTransformPaste,
@@ -102,5 +103,125 @@ describe("Phabricator try tooltip helper", () => {
 
   it("exposes a pending tooltip copy", () => {
     expect(PENDING_TOOLTIP).to.equal("Loading");
+  });
+});
+
+describe("Phabricator try link extraction", () => {
+  let phabTestApi;
+  const realSetTimeout = global.setTimeout;
+  const realConsoleDebug = console.debug;
+
+  function installDom(html = "<!doctype html><body></body>") {
+    const dom = new JSDOM(html, { url: "https://phabricator.services.mozilla.com/D123" });
+    global.window = dom.window;
+    global.document = dom.window.document;
+    global.location = dom.window.location;
+    global.navigator = dom.window.navigator;
+    global.HTMLElement = dom.window.HTMLElement;
+    global.HTMLTextAreaElement = dom.window.HTMLTextAreaElement;
+    global.Event = dom.window.Event;
+    global.CustomEvent = dom.window.CustomEvent;
+    global.requestAnimationFrame = dom.window.requestAnimationFrame || ((cb) => setTimeout(cb, 0));
+    dom.window.requestAnimationFrame = global.requestAnimationFrame;
+    return dom;
+  }
+
+  before(async () => {
+    console.debug = () => {};
+    global.setTimeout = (fn) => {
+      if (typeof fn === "function") fn();
+      return 0;
+    };
+    installDom();
+    const storageStub = {
+      sync: {
+        get: () =>
+          Promise.resolve({
+            enablePhabricator: true,
+            enablePhabricatorPaste: true,
+            enablePhabricatorTryLinks: true,
+            enablePhabricatorTryCommentIcons: true
+          })
+      },
+      onChanged: {
+        addListener: () => {}
+      }
+    };
+    const runtimeStub = {
+      runtime: {
+        sendMessage: () => Promise.resolve(null)
+      },
+      storage: storageStub
+    };
+    global.browser = runtimeStub;
+    global.chrome = runtimeStub;
+    global.__mozHelperExposePhabForTests = (api) => {
+      phabTestApi = api;
+    };
+    await import("../content/phabricator.js");
+    global.setTimeout = realSetTimeout;
+    expect(phabTestApi).to.exist;
+  });
+
+  beforeEach(() => {
+    installDom();
+  });
+
+  after(() => {
+    console.debug = realConsoleDebug;
+    delete global.__mozHelperExposePhabForTests;
+  });
+
+  it("ignores try links posted by reviewbot", () => {
+    const tryLink =
+      "https://treeherder.mozilla.org/#/jobs?repo=try&revision=abc123&landoCommitID=42";
+    document.body.innerHTML = `
+      <div class="phui-timeline-shell">
+        <div class="phui-timeline-title">
+          <a class="phui-link-person" href="/p/reviewbot/">reviewbot</a>
+        </div>
+        <div class="transaction-comment">
+          <a href="${tryLink}">try</a>
+        </div>
+        <a class="phabricator-anchor-view" id="comment-reviewbot"></a>
+      </div>
+    `;
+    const result = phabTestApi.phabFindLatestTryLinkData();
+    expect(result).to.be.null;
+  });
+
+  it("returns the latest non-reviewbot try link even when reviewbot comments last", () => {
+    const reviewerLink =
+      "https://treeherder.mozilla.org/#/jobs?repo=try&revision=def456&landoCommitID=87";
+    const reviewbotLink =
+      "https://treeherder.mozilla.org/#/jobs?repo=try&revision=zzz999&landoCommitID=99";
+    document.body.innerHTML = `
+      <div class="phui-timeline-shell">
+        <div class="phui-timeline-title">
+          <a class="phui-link-person" href="/p/alice/">Alice</a>
+        </div>
+        <div class="transaction-comment">
+          <a href="${reviewerLink}">try</a>
+        </div>
+        <a class="phabricator-anchor-view" id="comment-user"></a>
+      </div>
+      <div class="phui-timeline-shell">
+        <div class="phui-timeline-title">
+          <a class="phui-link-person" href="/p/reviewbot/">Automation</a>
+        </div>
+        <div class="transaction-comment">
+          <a href="${reviewbotLink}">try</a>
+        </div>
+        <a class="phabricator-anchor-view" id="comment-reviewbot"></a>
+      </div>
+    `;
+    const result = phabTestApi.phabFindLatestTryLinkData();
+    expect(result.url).to.equal(reviewerLink);
+    expect(result.commentUrl).to.equal(
+      "https://phabricator.services.mozilla.com/D123#comment-user"
+    );
+    expect(result.repo).to.equal("try");
+    expect(result.revision).to.equal("def456");
+    expect(result.landoCommitId).to.equal("87");
   });
 });

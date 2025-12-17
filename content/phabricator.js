@@ -598,6 +598,19 @@ function phabParseTryLinkParams(url) {
   };
 }
 
+function phabIsReviewbotComment(eventNode) {
+  if (!eventNode) return false;
+  const authorAnchor = eventNode.querySelector(
+    ".phui-timeline-title .phui-link-person, .phui-timeline-title .phui-link-profile, .phui-timeline-title .phui-handle"
+  );
+  if (!authorAnchor) return false;
+  const authorName = (authorAnchor.textContent || "").trim().toLowerCase();
+  if (authorName === "reviewbot") return true;
+  const href = authorAnchor.getAttribute("href") || "";
+  if (!href) return false;
+  return /\/p\/reviewbot\/?(?:$|[?#])/i.test(href);
+}
+
 function phabFindLatestTryLinkData() {
   const timelineEvents = document.querySelectorAll(".phui-timeline-shell");
   let latest = null;
@@ -606,6 +619,7 @@ function phabFindLatestTryLinkData() {
   timelineEvents.forEach((eventNode) => {
     const comment = eventNode.querySelector(".transaction-comment");
     if (!comment) return;
+    if (phabIsReviewbotComment(eventNode)) return;
     const links = Array.from(comment.querySelectorAll("a[href]")).filter((anchor) =>
       PHAB_TRY_LINK_PATTERN.test(anchor.href)
     );
@@ -633,6 +647,13 @@ function phabFindLatestTryLinkData() {
   });
 
   return latest;
+}
+
+if (typeof globalThis !== "undefined" && typeof globalThis.__mozHelperExposePhabForTests === "function") {
+  globalThis.__mozHelperExposePhabForTests({
+    phabIsReviewbotComment,
+    phabFindLatestTryLinkData
+  });
 }
 
 function phabGetTryResult(repo, revision, landoCommitId) {
