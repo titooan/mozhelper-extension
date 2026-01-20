@@ -110,19 +110,38 @@ describe("Phabricator try link extraction", () => {
   let phabTestApi;
   const realSetTimeout = global.setTimeout;
   const realConsoleDebug = console.debug;
+  const originalNavigatorDescriptor = Object.getOwnPropertyDescriptor(global, "navigator");
+  let documentPasteListenerCalls = [];
+
+  function setGlobalNavigator(value) {
+    try {
+      delete global.navigator;
+    } catch (error) {}
+    Object.defineProperty(global, "navigator", {
+      value,
+      configurable: true,
+      writable: true
+    });
+  }
 
   function installDom(html = "<!doctype html><body></body>") {
     const dom = new JSDOM(html, { url: "https://phabricator.services.mozilla.com/D123" });
     global.window = dom.window;
     global.document = dom.window.document;
     global.location = dom.window.location;
-    global.navigator = dom.window.navigator;
+    setGlobalNavigator(dom.window.navigator);
     global.HTMLElement = dom.window.HTMLElement;
     global.HTMLTextAreaElement = dom.window.HTMLTextAreaElement;
     global.Event = dom.window.Event;
     global.CustomEvent = dom.window.CustomEvent;
     global.requestAnimationFrame = dom.window.requestAnimationFrame || ((cb) => setTimeout(cb, 0));
     dom.window.requestAnimationFrame = global.requestAnimationFrame;
+    documentPasteListenerCalls = [];
+    const originalAddEventListener = dom.window.document.addEventListener;
+    dom.window.document.addEventListener = function (type, listener, options) {
+      documentPasteListenerCalls.push({ type, listener, options });
+      return originalAddEventListener.call(this, type, listener, options);
+    };
     return dom;
   }
 
@@ -167,9 +186,34 @@ describe("Phabricator try link extraction", () => {
     installDom();
   });
 
-  after(() => {
-    console.debug = realConsoleDebug;
-    delete global.__mozHelperExposePhabForTests;
+  it("attaches a single document paste listener", () => {
+    phabTestApi.phabAttachPasteHandlers();
+    const pasteListeners = documentPasteListenerCalls.filter((entry) => entry.type === "paste");
+    expect(pasteListeners).to.have.lengthOf(1);
+    expect(pasteListeners[0]?.options).to.equal(true);
+    phabTestApi.phabAttachPasteHandlers();
+    const pasteListenersAgain = documentPasteListenerCalls.filter((entry) => entry.type === "paste");
+    expect(pasteListenersAgain).to.have.lengthOf(1);
+  });
+
+  it("wraps selections pasted into remarkup comment textareas", () => {
+    phabTestApi.phabAttachPasteHandlers();
+    const textarea = document.createElement("textarea");
+    textarea.className = "remarkup-assist-textarea";
+    textarea.value = "label";
+    document.body.appendChild(textarea);
+    textarea.setSelectionRange(0, textarea.value.length);
+    const pasteEvent = new window.Event("paste", { bubbles: true, cancelable: true });
+    pasteEvent.clipboardData = {
+      getData(type) {
+        if (type === "text/plain") return "example.com";
+        if (type === "text/html") return "";
+        return "";
+      }
+    };
+    textarea.dispatchEvent(pasteEvent);
+    expect(textarea.value).to.equal("[label](https://example.com)");
+    expect(pasteEvent.defaultPrevented).to.be.true;
   });
 
   it("ignores try links posted by reviewbot", () => {
@@ -223,5 +267,17 @@ describe("Phabricator try link extraction", () => {
     expect(result.repo).to.equal("try");
     expect(result.revision).to.equal("def456");
     expect(result.landoCommitId).to.equal("87");
+  });
+
+  after(() => {
+    console.debug = realConsoleDebug;
+    delete global.__mozHelperExposePhabForTests;
+    if (originalNavigatorDescriptor) {
+      Object.defineProperty(global, "navigator", originalNavigatorDescriptor);
+    } else {
+      try {
+        delete global.navigator;
+      } catch (error) {}
+    }
   });
 });

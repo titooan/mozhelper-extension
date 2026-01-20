@@ -12,6 +12,8 @@ let phabVideoEnabled = true;
 let phabPasteEnabled = true;
 let phabTryLinkEnabled = true;
 let phabTryCommentIconsEnabled = true;
+let phabPasteListenerAttached = false;
+let phabPasteListenerDocument = null;
 let phabTryTooltipNode = null;
 const PHAB_COMMENT_TRY_ICONS = new WeakMap();
 
@@ -234,13 +236,10 @@ function phabHandlePaste(event) {
 }
 
 function phabAttachPasteHandlers() {
-  const fields = document.querySelectorAll("textarea.remarkup-assist-textarea");
-  fields.forEach((field) => {
-    if (!field.dataset.phabPasteHandled) {
-      field.addEventListener("paste", phabHandlePaste, true);
-      field.dataset.phabPasteHandled = "true";
-    }
-  });
+  if (phabPasteListenerAttached && phabPasteListenerDocument === document) return;
+  document.addEventListener("paste", phabHandlePaste, true);
+  phabPasteListenerAttached = true;
+  phabPasteListenerDocument = document;
 }
 
 function phabFindDiffDetailList() {
@@ -652,7 +651,9 @@ function phabFindLatestTryLinkData() {
 if (typeof globalThis !== "undefined" && typeof globalThis.__mozHelperExposePhabForTests === "function") {
   globalThis.__mozHelperExposePhabForTests({
     phabIsReviewbotComment,
-    phabFindLatestTryLinkData
+    phabFindLatestTryLinkData,
+    phabAttachPasteHandlers,
+    phabHandlePaste
   });
 }
 
