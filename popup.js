@@ -8,6 +8,7 @@ document.addEventListener("DOMContentLoaded", () => {
     enablePhabricatorPaste: document.getElementById("popupEnablePhabricatorPaste"),
     enablePhabricatorTryLinks: document.getElementById("popupEnablePhabricatorTryLinks"),
     enablePhabricatorTryCommentIcons: document.getElementById("popupEnablePhabricatorTryCommentIcons"),
+    enablePhabricatorFileNotAttachedNotice: document.getElementById("popupEnablePhabricatorFileNotAttachedNotice"),
     enableBugzilla: document.getElementById("popupEnableBugzilla"),
     enableTreeherder: document.getElementById("popupEnableTreeherder"),
     enableTreeherderUnitTests: document.getElementById("popupEnableTreeherderUnitTests")
