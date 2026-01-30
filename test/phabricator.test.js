@@ -159,7 +159,8 @@ describe("Phabricator try link extraction", () => {
             enablePhabricator: true,
             enablePhabricatorPaste: true,
             enablePhabricatorTryLinks: true,
-            enablePhabricatorTryCommentIcons: true
+            enablePhabricatorTryCommentIcons: true,
+            enablePhabricatorFileNotAttachedNotice: true
           })
       },
       onChanged: {
@@ -184,6 +185,12 @@ describe("Phabricator try link extraction", () => {
 
   beforeEach(() => {
     installDom();
+    if (phabTestApi?.phabResetFileNotAttachedDismissed) {
+      phabTestApi.phabResetFileNotAttachedDismissed();
+    }
+    if (phabTestApi?.phabSetFileNotAttachedEnabled) {
+      phabTestApi.phabSetFileNotAttachedEnabled(true);
+    }
   });
 
   it("attaches a single document paste listener", () => {
@@ -267,6 +274,89 @@ describe("Phabricator try link extraction", () => {
     expect(result.repo).to.equal("try");
     expect(result.revision).to.equal("def456");
     expect(result.landoCommitId).to.equal("87");
+  });
+
+  it("shows a file-not-attached notice with action buttons", () => {
+    document.body.innerHTML = `
+      <div class="phui-curtain-object-ref-view phui-curtain-object-ref-view-exiled">
+        <div class="phui-curtain-object-ref-view-exiled-cell">
+          <span>File Not Attached</span>
+          <a href="/file/ui/curtain/attach/PHID-DREV-1/PHID-FILE-1/" data-sigil="workflow">File Not Attached</a>
+        </div>
+      </div>
+    `;
+    phabTestApi.phabUpdateFileNotAttachedNotice();
+    const notice = document.querySelector('[data-phab-file-not-attached-notice="true"]');
+    expect(notice).to.exist;
+    expect(notice.querySelector('[data-phab-file-notice-view="true"]')).to.exist;
+    expect(notice.querySelector('[data-phab-file-notice-attach="true"]')).to.exist;
+  });
+
+  it("clicks the attach workflow link from the notice", () => {
+    phabTestApi.phabSetFileNotAttachedEnabled(true);
+    phabTestApi.phabResetFileNotAttachedDismissed();
+    let clicked = false;
+    document.body.innerHTML = `
+      <div class="phui-curtain-object-ref-view phui-curtain-object-ref-view-exiled">
+        <div class="phui-curtain-object-ref-view-exiled-cell">
+          File Not Attached
+          <a href="/file/ui/curtain/attach/PHID-DREV-2/PHID-FILE-2/" data-sigil="workflow">File Not Attached</a>
+        </div>
+      </div>
+    `;
+    expect(phabTestApi.phabHasUnattachedFiles()).to.equal(true);
+    const link = document.querySelector('a[data-sigil="workflow"]');
+    link.addEventListener("click", () => {
+      clicked = true;
+    });
+    phabTestApi.phabUpdateFileNotAttachedNotice();
+    const notice = document.querySelector('[data-phab-file-not-attached-notice="true"]');
+    expect(notice).to.exist;
+    const attachButton = notice.querySelector('[data-phab-file-notice-attach="true"]');
+    expect(attachButton).to.exist;
+    attachButton.click();
+    expect(clicked).to.equal(true);
+  });
+
+  it("scrolls to the attached-files panel when clicking View", () => {
+    phabTestApi.phabSetFileNotAttachedEnabled(true);
+    phabTestApi.phabResetFileNotAttachedDismissed();
+    let scrolled = false;
+    document.body.innerHTML = `
+      <div class="phui-curtain-object-ref-view phui-curtain-object-ref-view-exiled" id="target">
+        <div class="phui-curtain-object-ref-view-exiled-cell">
+          File Not Attached
+          <a href="/file/ui/curtain/attach/PHID-DREV-3/PHID-FILE-3/" data-sigil="workflow">File Not Attached</a>
+        </div>
+      </div>
+    `;
+    expect(phabTestApi.phabHasUnattachedFiles()).to.equal(true);
+    const target = document.getElementById("target");
+    target.scrollIntoView = () => {
+      scrolled = true;
+    };
+    phabTestApi.phabUpdateFileNotAttachedNotice();
+    const notice = document.querySelector('[data-phab-file-not-attached-notice="true"]');
+    expect(notice).to.exist;
+    const viewButton = notice.querySelector('[data-phab-file-notice-view="true"]');
+    expect(viewButton).to.exist;
+    viewButton.click();
+    expect(scrolled).to.equal(true);
+  });
+
+  it("disables Attach when no workflow link exists", () => {
+    phabTestApi.phabSetFileNotAttachedEnabled(true);
+    phabTestApi.phabResetFileNotAttachedDismissed();
+    document.body.innerHTML = `
+      <div class="phui-curtain-object-ref-view-exiled-cell">File Not Attached</div>
+    `;
+    expect(phabTestApi.phabHasUnattachedFiles()).to.equal(true);
+    phabTestApi.phabUpdateFileNotAttachedNotice();
+    const notice = document.querySelector('[data-phab-file-not-attached-notice="true"]');
+    expect(notice).to.exist;
+    const attachButton = notice.querySelector('[data-phab-file-notice-attach="true"]');
+    expect(attachButton).to.exist;
+    expect(attachButton.disabled).to.equal(true);
   });
 
   after(() => {

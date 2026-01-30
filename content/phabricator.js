@@ -6,15 +6,19 @@ const phabDefaultSettings = {
   enablePhabricator: true,
   enablePhabricatorPaste: true,
   enablePhabricatorTryLinks: true,
-  enablePhabricatorTryCommentIcons: true
+  enablePhabricatorTryCommentIcons: true,
+  enablePhabricatorFileNotAttachedNotice: true
 };
 let phabVideoEnabled = true;
 let phabPasteEnabled = true;
 let phabTryLinkEnabled = true;
 let phabTryCommentIconsEnabled = true;
+let phabFileNotAttachedEnabled = true;
 let phabPasteListenerAttached = false;
 let phabPasteListenerDocument = null;
 let phabTryTooltipNode = null;
+let phabFileNotAttachedNotice = null;
+let phabFileNotAttachedDismissed = false;
 const PHAB_COMMENT_TRY_ICONS = new WeakMap();
 
 const PHAB_VIDEO_EXTENSIONS = [".mov", ".mp4", ".webm", ".m4v"];
@@ -240,6 +244,158 @@ function phabAttachPasteHandlers() {
   document.addEventListener("paste", phabHandlePaste, true);
   phabPasteListenerAttached = true;
   phabPasteListenerDocument = document;
+}
+
+function phabFindUnattachedFileLink() {
+  return document.querySelector(
+    '.phui-curtain-object-ref-view-exiled a[data-sigil="workflow"][href*="/file/ui/curtain/attach/"],' +
+      ' .phui-curtain-object-ref-view-exiled-cell a[data-sigil="workflow"][href*="/file/ui/curtain/attach/"]'
+  );
+}
+
+function phabHasUnattachedFiles() {
+  const exiledCells = document.querySelectorAll(
+    ".phui-curtain-object-ref-view-exiled-cell, .phui-curtain-object-ref-view-exiled"
+  );
+  for (const cell of exiledCells) {
+    const text = (cell.textContent || "").toLowerCase();
+    if (text.includes("file not attached")) return true;
+  }
+  const attachLink = phabFindUnattachedFileLink();
+  if (attachLink && /file not attached/i.test(attachLink.textContent || "")) return true;
+  return false;
+}
+
+function phabRemoveFileNotAttachedNotice() {
+  if (!phabFileNotAttachedNotice) return;
+  phabFileNotAttachedNotice.remove();
+  phabFileNotAttachedNotice = null;
+}
+
+function phabEnsureFileNotAttachedNotice() {
+  if (phabFileNotAttachedNotice) {
+    const sameDocument = phabFileNotAttachedNotice.ownerDocument === document;
+    if (phabFileNotAttachedNotice.isConnected && sameDocument) {
+      return phabFileNotAttachedNotice;
+    }
+    phabRemoveFileNotAttachedNotice();
+  }
+  const notice = document.createElement("div");
+  notice.dataset.phabFileNotAttachedNotice = "true";
+  notice.setAttribute("role", "alert");
+  notice.style.position = "fixed";
+  notice.style.top = "16px";
+  notice.style.right = "16px";
+  notice.style.zIndex = "2147483001";
+  notice.style.background = "#7f1d1d";
+  notice.style.color = "#fef2f2";
+  notice.style.border = "1px solid #fecaca";
+  notice.style.borderRadius = "8px";
+  notice.style.boxShadow = "0 10px 24px rgba(0,0,0,0.25)";
+  notice.style.padding = "10px 12px";
+  notice.style.fontSize = "12px";
+  notice.style.lineHeight = "16px";
+  notice.style.maxWidth = "260px";
+  notice.style.fontFamily = "system-ui, -apple-system, Segoe UI, sans-serif";
+  notice.style.display = "flex";
+  notice.style.gap = "8px";
+  notice.style.alignItems = "flex-start";
+
+  const content = document.createElement("div");
+  const title = document.createElement("div");
+  title.textContent = "File not attached";
+  title.style.fontWeight = "700";
+  const body = document.createElement("div");
+  body.textContent = "Some referenced files are not public.";
+  body.style.marginTop = "2px";
+  content.append(title, body);
+
+  const actions = document.createElement("div");
+  actions.style.display = "flex";
+  actions.style.gap = "6px";
+  actions.style.marginTop = "6px";
+
+  const viewButton = document.createElement("button");
+  viewButton.type = "button";
+  viewButton.textContent = "View";
+  viewButton.dataset.phabFileNoticeView = "true";
+  viewButton.style.border = "1px solid rgba(255,255,255,0.35)";
+  viewButton.style.background = "rgba(0,0,0,0.2)";
+  viewButton.style.color = "inherit";
+  viewButton.style.borderRadius = "6px";
+  viewButton.style.padding = "4px 8px";
+  viewButton.style.cursor = "pointer";
+  viewButton.style.fontSize = "12px";
+  viewButton.addEventListener("click", () => {
+    const link = phabFindUnattachedFileLink();
+    const target = link?.closest(".phui-curtain-object-ref-view") || link?.closest(".phui-curtain-panel") || link;
+    if (target?.scrollIntoView) {
+      target.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  });
+
+  const attachButton = document.createElement("button");
+  attachButton.type = "button";
+  attachButton.textContent = "Attach";
+  attachButton.dataset.phabFileNoticeAttach = "true";
+  attachButton.style.border = "1px solid rgba(255,255,255,0.35)";
+  attachButton.style.background = "#fef2f2";
+  attachButton.style.color = "#7f1d1d";
+  attachButton.style.borderRadius = "6px";
+  attachButton.style.padding = "4px 8px";
+  attachButton.style.cursor = "pointer";
+  attachButton.style.fontSize = "12px";
+  attachButton.addEventListener("click", () => {
+    const link = phabFindUnattachedFileLink();
+    if (link) link.click();
+  });
+
+  actions.append(viewButton, attachButton);
+  content.append(actions);
+
+  const close = document.createElement("button");
+  close.type = "button";
+  close.setAttribute("aria-label", "Dismiss");
+  close.textContent = "x";
+  close.style.border = "none";
+  close.style.background = "transparent";
+  close.style.color = "inherit";
+  close.style.fontSize = "16px";
+  close.style.lineHeight = "16px";
+  close.style.cursor = "pointer";
+  close.style.padding = "0";
+  close.addEventListener("click", () => {
+    phabFileNotAttachedDismissed = true;
+    phabRemoveFileNotAttachedNotice();
+  });
+
+  notice.append(content, close);
+  document.body.appendChild(notice);
+  phabFileNotAttachedNotice = notice;
+  return notice;
+}
+
+function phabUpdateFileNotAttachedNotice() {
+  if (!phabFileNotAttachedEnabled) {
+    phabFileNotAttachedDismissed = false;
+    phabRemoveFileNotAttachedNotice();
+    return;
+  }
+  const hasUnattached = phabHasUnattachedFiles();
+  if (!hasUnattached) {
+    phabFileNotAttachedDismissed = false;
+    phabRemoveFileNotAttachedNotice();
+    return;
+  }
+  if (phabFileNotAttachedDismissed) return;
+  const notice = phabEnsureFileNotAttachedNotice();
+  const attachButton = notice.querySelector('[data-phab-file-notice-attach="true"]');
+  const link = phabFindUnattachedFileLink();
+  if (attachButton) {
+    attachButton.disabled = !link;
+    attachButton.style.opacity = link ? "1" : "0.6";
+    attachButton.style.cursor = link ? "pointer" : "not-allowed";
+  }
 }
 
 function phabFindDiffDetailList() {
@@ -653,7 +809,16 @@ if (typeof globalThis !== "undefined" && typeof globalThis.__mozHelperExposePhab
     phabIsReviewbotComment,
     phabFindLatestTryLinkData,
     phabAttachPasteHandlers,
-    phabHandlePaste
+    phabHandlePaste,
+    phabHasUnattachedFiles,
+    phabFindUnattachedFileLink,
+    phabUpdateFileNotAttachedNotice,
+    phabSetFileNotAttachedEnabled(value) {
+      phabFileNotAttachedEnabled = Boolean(value);
+    },
+    phabResetFileNotAttachedDismissed() {
+      phabFileNotAttachedDismissed = false;
+    }
   });
 }
 
@@ -755,6 +920,7 @@ function phabProcessPage() {
   phabAttachPasteHandlers();
   phabUpdateLatestTryLink();
   phabProcessCommentTryLinks();
+  phabUpdateFileNotAttachedNotice();
 }
 
 function phabRunInitialPasses() {
@@ -776,6 +942,7 @@ function phabInit() {
     phabPasteEnabled = items.enablePhabricatorPaste ?? true;
     phabTryLinkEnabled = items.enablePhabricatorTryLinks ?? true;
     phabTryCommentIconsEnabled = items.enablePhabricatorTryCommentIcons ?? true;
+    phabFileNotAttachedEnabled = items.enablePhabricatorFileNotAttachedNotice ?? true;
     phabRunInitialPasses();
   });
   phabRuntime.storage.onChanged.addListener((changes, area) => {
@@ -795,6 +962,10 @@ function phabInit() {
     if (changes.enablePhabricatorTryCommentIcons) {
       phabTryCommentIconsEnabled = changes.enablePhabricatorTryCommentIcons.newValue;
       phabProcessCommentTryLinks();
+    }
+    if (changes.enablePhabricatorFileNotAttachedNotice) {
+      phabFileNotAttachedEnabled = changes.enablePhabricatorFileNotAttachedNotice.newValue;
+      phabUpdateFileNotAttachedNotice();
     }
   });
 }

@@ -7,6 +7,7 @@ const MozHelperSettings = (() => {
     enablePhabricatorPaste: true,
     enablePhabricatorTryLinks: true,
     enablePhabricatorTryCommentIcons: true,
+    enablePhabricatorFileNotAttachedNotice: true,
     enableBugzilla: true,
     enableTreeherder: true,
     enableTreeherderUnitTests: true
