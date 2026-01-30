@@ -12,6 +12,7 @@ Moz Helper Suite is a Firefox add-on that bundles several small productivity fea
 - **Phabricator try link surfacer** – retrieves the latest try push link from comments and adds it to the `Diff detail` section so reviewers can see CI status at a glance.
 - **Phabricator try link status badger** – prefixes every try link with an icon indicating its status (loading, success, or failure).
 - **Phabricator markdown paste helper** – highlight text in any remarkup field and paste a link to instantly wrap the selection with `[text](url)` markdown without touching the mouse again.
+- **Phabricator file-not-attached notifier** – shows a sticky top-right alert when a comment includes a “File Not Attached” item, with quick View/Attach actions.
 - **Treeherder Firebase TestLab helper** – adds a Firebase button to the Treeherder job summary and navigation bar that fetches the latest TestLab link via Taskcluster.
 - **Treeherder unit test shortcut** – detects Taskcluster jobs that expose unit-test HTML reports and adds a toolbar icon that jumps directly to the rendered results.
 - **Shared settings/popup surfaces** – a toolbar popup and options page let you enable or disable each helper individually, with sync storage keeping preferences aligned across browsers.
