@@ -10,6 +10,7 @@ const TRY_ACTIVE_STATES = new Set(["pending", "running", "coalesced", "queued"])
 const TRY_PENDING_RESULTS = new Set(["unknown"]);
 const TRY_IGNORED_RESULTS = new Set(["retry"]);
 const TRY_IGNORED_STATES = new Set(["retry"]);
+const TRY_UNSCHEDULED_STATES = new Set(["unscheduled"]);
 const MAX_PENDING_DEBUG = 15;
 
 function parseJobTimestamp(value) {
@@ -108,8 +109,13 @@ function normalizeJobEntry(job, index, stats) {
   const stateIsPending = state && TRY_ACTIVE_STATES.has(state);
   const stateIsIgnored = state && TRY_IGNORED_STATES.has(state);
   const resultIsIgnored = hasResult && TRY_IGNORED_RESULTS.has(result);
+  const stateIsUnscheduled = state && TRY_UNSCHEDULED_STATES.has(state);
   if (stateIsIgnored || resultIsIgnored) {
     if (stats) stats.ignoredRetryJobs += 1;
+    return null;
+  }
+  if (stateIsUnscheduled && resultIsPending) {
+    if (stats) stats.ignoredUnscheduledJobs += 1;
     return null;
   }
   return {
@@ -226,6 +232,7 @@ function assessTryJobs(jobs) {
   let failedJobs = 0;
   const diagnostics = {
     ignoredRetryJobs: 0,
+    ignoredUnscheduledJobs: 0,
     ignoredMalformedJobs: 0,
     normalizedJobs: 0,
     dedupedJobs: 0
@@ -263,8 +270,9 @@ function assessTryJobs(jobs) {
     uniqueJobs: latestJobs.size,
     consideredJobs: diagnostics.normalizedJobs,
     dedupedJobs: diagnostics.dedupedJobs,
-    ignoredJobs: diagnostics.ignoredRetryJobs + diagnostics.ignoredMalformedJobs,
+    ignoredJobs: diagnostics.ignoredRetryJobs + diagnostics.ignoredMalformedJobs + diagnostics.ignoredUnscheduledJobs,
     ignoredRetries: diagnostics.ignoredRetryJobs,
+    ignoredUnscheduled: diagnostics.ignoredUnscheduledJobs,
     ignoredMalformed: diagnostics.ignoredMalformedJobs
   };
   if (!jobs.length) {

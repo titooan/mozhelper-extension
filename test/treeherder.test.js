@@ -176,6 +176,17 @@ describe("Treeherder try status helper", () => {
     expect(result.summary.failedJobs).to.equal(1);
   });
 
+  it("ignores unscheduled unknown jobs when failures exist", () => {
+    const result = assessTryJobs([
+      { state: "unscheduled", result: "unknown", job_type_name: "signing-apk-fenix-debug" },
+      { state: "completed", result: "failed", job_type_name: "xpcshell" }
+    ]);
+    expect(result.status).to.equal("failure");
+    expect(result.reason).to.be.null;
+    expect(result.summary.activeJobs).to.equal(0);
+    expect(result.summary.failedJobs).to.equal(1);
+  });
+
   it("handles malformed inputs", () => {
     const result = assessTryJobs(null);
     expect(result.reason).to.equal("missing-jobs");

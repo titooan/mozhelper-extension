@@ -722,6 +722,18 @@ function phabRenderTryLinkEntry(list, data) {
     const commentAnchor = document.createElement("a");
     commentAnchor.href = data.commentUrl;
     commentAnchor.textContent = "Link to comment";
+    if (data.commentId) {
+      commentAnchor.dataset.phabCommentId = data.commentId;
+      commentAnchor.addEventListener("click", (event) => {
+        event.preventDefault();
+        const target = document.getElementById(data.commentId) || document.querySelector(`[name="${data.commentId}"]`);
+        if (target) {
+          target.scrollIntoView({ behavior: "smooth", block: "center" });
+          return;
+        }
+        window.location.href = data.commentUrl;
+      });
+    }
     dd.appendChild(commentAnchor);
   }
 
@@ -795,6 +807,7 @@ function phabFindLatestTryLinkData() {
     latest = {
       url: tryLink.href,
       commentUrl: anchorId ? `${baseUrl}#${anchorId}` : null,
+      commentId: anchorId || null,
       repo,
       revision,
       landoCommitId
