@@ -10,7 +10,8 @@ const MozHelperSettings = (() => {
     enablePhabricatorFileNotAttachedNotice: true,
     enableBugzilla: true,
     enableTreeherder: true,
-    enableTreeherderUnitTests: true
+    enableTreeherderUnitTests: true,
+    enableTreeherderMacrobenchmarkTable: true
   };
 
   function applyState(checkboxes, values) {

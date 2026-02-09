@@ -7,6 +7,13 @@ import {
   buildUnitTestArtifactLink,
   TREEHERDER_TC_BASE
 } from "../src/treeherder/testlab.js";
+import {
+  MACROBENCHMARK_JOB_NAME,
+  shouldShowMacrobenchmarkTable,
+  findLiveBackingLogArtifact,
+  extractMacrobenchmarkMarkdownTable,
+  parseMarkdownTable
+} from "../src/treeherder/performanceTable.js";
 import { assessTryJobs } from "../src/treeherder/tryStatus.js";
 
 describe("Treeherder Firebase helper", () => {
@@ -204,5 +211,58 @@ describe("Treeherder try status helper", () => {
     expect(result.summary.dedupedJobs).to.equal(1);
     expect(result.summary.ignoredRetries).to.equal(1);
     expect(result.summary.ignoredJobs).to.equal(1);
+  });
+});
+
+describe("Treeherder macrobenchmark performance table helper", () => {
+  it("enables table rendering only for the macrobenchmark job name", () => {
+    expect(shouldShowMacrobenchmarkTable(MACROBENCHMARK_JOB_NAME)).to.equal(true);
+    expect(shouldShowMacrobenchmarkTable(` ${MACROBENCHMARK_JOB_NAME} `)).to.equal(true);
+    expect(shouldShowMacrobenchmarkTable("run-other-job")).to.equal(false);
+  });
+
+  it("finds live_backing.log artifact", () => {
+    const artifacts = [
+      { name: "public/logs/live_backing.log" },
+      { name: "public/logs/live.log" }
+    ];
+    expect(findLiveBackingLogArtifact(artifacts)).to.deep.equal(artifacts[0]);
+    expect(findLiveBackingLogArtifact([{ name: "public/build/whatever.txt" }])).to.be.null;
+  });
+
+  it("extracts and parses benchmark markdown table from task logs", () => {
+    const logText = [
+      "[task 2026-02-05T19:56:48.672+00:00] | Benchmark                               | median | median None | % diff |",
+      "[task 2026-02-05T19:56:48.672+00:00] |:-------------------------------------------:|:-------------:|:--------:|",
+      "[task 2026-02-05T19:56:48.672+00:00] | browserPageScroll                        | 610.925 | 738.986 | 17.3 |",
+      "[task 2026-02-05T19:56:48.672+00:00] | switchTabsAnimationOff                   | 20.000 | 0.000 |  |"
+    ].join("\n");
+
+    const markdown = extractMacrobenchmarkMarkdownTable(logText);
+    expect(markdown).to.be.a("string");
+    expect(markdown).to.not.include("[task ");
+
+    const parsed = parseMarkdownTable(markdown);
+    expect(parsed).to.not.equal(null);
+    expect(parsed.headers[0]).to.equal("Benchmark");
+    expect(parsed.rows[0][0]).to.equal("browserPageScroll");
+    expect(parsed.rows[1][0]).to.equal("switchTabsAnimationOff");
+  });
+
+  it("preserves markdown formatting for clipboard copy", () => {
+    const logText = [
+      "[task 2026-02-05T19:56:48.672+00:00] | Benchmark                               | median | median None | % diff |",
+      "[task 2026-02-05T19:56:48.672+00:00] |:-------------------------------------------:|:-------------:|:--------:|",
+      "[task 2026-02-05T19:56:48.672+00:00] | browserPageScroll                        | 610.925 | 738.986 | 17.3 |"
+    ].join("\n");
+
+    const markdown = extractMacrobenchmarkMarkdownTable(logText);
+    expect(markdown).to.equal(
+      [
+        "| Benchmark                               | median | median None | % diff |",
+        "|:-------------------------------------------:|:-------------:|:--------:|",
+        "| browserPageScroll                        | 610.925 | 738.986 | 17.3 |"
+      ].join("\n")
+    );
   });
 });
