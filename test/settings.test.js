@@ -29,6 +29,10 @@ describe("MozHelperSettings dependent toggles", () => {
     expect(MozHelperSettings.defaultSettings).to.have.property("enablePhabricatorTryCommentIcons", true);
   });
 
+  it("includes Treeherder macrobenchmark table default", () => {
+    expect(MozHelperSettings.defaultSettings).to.have.property("enableTreeherderMacrobenchmarkTable", true);
+  });
+
   it("disables child checkbox and label when parent unchecked", () => {
     const dom = new JSDOM(`
       <label class="parent">

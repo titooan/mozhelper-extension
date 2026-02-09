@@ -9,7 +9,8 @@ document.addEventListener("DOMContentLoaded", () => {
     enablePhabricatorFileNotAttachedNotice: document.getElementById("enablePhabricatorFileNotAttachedNotice"),
     enableBugzilla: document.getElementById("enableBugzilla"),
     enableTreeherder: document.getElementById("enableTreeherder"),
-    enableTreeherderUnitTests: document.getElementById("enableTreeherderUnitTests")
+    enableTreeherderUnitTests: document.getElementById("enableTreeherderUnitTests"),
+    enableTreeherderMacrobenchmarkTable: document.getElementById("enableTreeherderMacrobenchmarkTable")
   };
 
   MozHelperSettings.initToggles({
@@ -21,6 +22,14 @@ document.addEventListener("DOMContentLoaded", () => {
   MozHelperSettings.bindDependentToggle({
     parent: checkboxes.enableGmail,
     child: checkboxes.enableGmailHover
+  });
+  MozHelperSettings.bindDependentToggle({
+    parent: checkboxes.enableTreeherder,
+    child: checkboxes.enableTreeherderUnitTests
+  });
+  MozHelperSettings.bindDependentToggle({
+    parent: checkboxes.enableTreeherder,
+    child: checkboxes.enableTreeherderMacrobenchmarkTable
   });
 
 });
