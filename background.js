@@ -11,6 +11,7 @@ const TRY_PENDING_RESULTS = new Set(["unknown"]);
 const TRY_IGNORED_RESULTS = new Set(["retry"]);
 const TRY_IGNORED_STATES = new Set(["retry"]);
 const TRY_UNSCHEDULED_STATES = new Set(["unscheduled"]);
+const TRY_BLOCKING_TIERS = new Set([1]);
 const MAX_PENDING_DEBUG = 15;
 
 function parseJobTimestamp(value) {
@@ -95,6 +96,18 @@ function describeJob(job, state, result) {
   };
 }
 
+function isBlockingTier(job) {
+  const tier = job?.tier;
+  if (tier == null || tier === "") {
+    return true;
+  }
+  const parsedTier = Number(tier);
+  if (!Number.isFinite(parsedTier)) {
+    return true;
+  }
+  return TRY_BLOCKING_TIERS.has(parsedTier);
+}
+
 function normalizeJobEntry(job, index, stats) {
   if (!job || typeof job !== "object") {
     if (stats) stats.ignoredMalformedJobs += 1;
@@ -125,6 +138,7 @@ function normalizeJobEntry(job, index, stats) {
     hasResult,
     resultIsPending,
     stateIsPending,
+    isBlocking: isBlockingTier(job),
     key: buildJobKey(job, index),
     order: computeJobOrder(job, index),
     index
@@ -251,14 +265,14 @@ function assessTryJobs(jobs) {
     }
   });
   for (const entry of latestJobs.values()) {
-    const { job, state, result, hasResult, resultIsPending, stateIsPending } = entry;
+    const { job, state, result, hasResult, resultIsPending, stateIsPending, isBlocking } = entry;
     if (!hasResult || stateIsPending || resultIsPending) {
       activeJobs += 1;
       if (pendingJobDetails.length < MAX_PENDING_DEBUG) {
         pendingJobDetails.push(describeJob(job, state, result));
       }
     }
-    if (hasResult && !TRY_SUCCESS_RESULTS.has(result) && !resultIsPending) {
+    if (isBlocking && hasResult && !TRY_SUCCESS_RESULTS.has(result) && !resultIsPending) {
       failedJobs += 1;
       failedJobDetails.push(describeJob(job, state, result));
     }

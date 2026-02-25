@@ -76,7 +76,7 @@
   ],
   "web_accessible_resources": [
     {
-      "resources": ["icons/tests_icon.png"],
+      "resources": ["icons/tests_icon.png", "icons/phabricator-favicon-red.png"],
       "matches": ["<all_urls>"]
     }
   ]
