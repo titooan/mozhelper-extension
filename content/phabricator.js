@@ -7,18 +7,30 @@ const phabDefaultSettings = {
   enablePhabricatorPaste: true,
   enablePhabricatorTryLinks: true,
   enablePhabricatorTryCommentIcons: true,
+  enablePhabricatorUnsubmittedIndicator: true,
   enablePhabricatorFileNotAttachedNotice: true
 };
 let phabVideoEnabled = true;
 let phabPasteEnabled = true;
 let phabTryLinkEnabled = true;
 let phabTryCommentIconsEnabled = true;
+let phabUnsubmittedIndicatorEnabled = true;
 let phabFileNotAttachedEnabled = true;
 let phabPasteListenerAttached = false;
 let phabPasteListenerDocument = null;
 let phabTryTooltipNode = null;
 let phabFileNotAttachedNotice = null;
 let phabFileNotAttachedDismissed = false;
+let phabUnsubmittedIndicatorObserver = null;
+let phabUnsubmittedIndicatorPending = false;
+let phabUnsubmittedFloatingButton = null;
+let phabLastKnownUnsubmittedCountText = null;
+let phabLastUnsubmittedDebugSignature = null;
+let phabOriginalFaviconHref = null;
+let phabUnsubmittedViewportListenersBound = false;
+let phabUnsubmittedInputListenerBound = false;
+let phabUnsubmittedUpdateSequence = 0;
+let phabUnsubmittedPendingReason = null;
 const PHAB_COMMENT_TRY_ICONS = new WeakMap();
 
 const PHAB_VIDEO_EXTENSIONS = [".mov", ".mp4", ".webm", ".m4v"];
@@ -32,6 +44,664 @@ const PHAB_TRY_LINK_PATTERN = /^https:\/\/treeherder\.mozilla\.org\/(#\/)?jobs\?
 const PHAB_TRY_STATUS_CACHE = new Map();
 const PHAB_SUCCESS_TOOLTIP = "Passed"; // Keep in sync with src/phabricator/tryStatusTooltip.js
 const PHAB_PENDING_TOOLTIP = "Loading"; // Keep in sync with src/phabricator/tryStatusTooltip.js
+const PHAB_UNSUBMITTED_FAVICON = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='30' fill='%23dc2626'/%3E%3C/svg%3E";
+const PHAB_UNSUBMITTED_FAVICON_PATH = "icons/phabricator-favicon-red.png";
+
+function phabIsDifferentialRevisionPage() {
+  const path = window.location?.pathname || "";
+  return /^\/D\d+(?:\/|$)/.test(path);
+}
+
+function phabFindFaviconLink() {
+  return (
+    document.querySelector("link#favicon") ||
+    document.querySelector("link[rel~='icon']") ||
+    null
+  );
+}
+
+function phabGetMainCommentTextarea() {
+  return document.querySelector("textarea[name='comment']");
+}
+
+function phabGetDiffBannerStatus() {
+  const banner = document.getElementById("diff-banner") || document.querySelector(".diff-banner");
+  const hasUnsaved = Boolean(banner?.classList?.contains("diff-banner-has-unsaved"));
+  const hasUnsubmitted = Boolean(banner?.classList?.contains("diff-banner-has-unsubmitted"));
+  return {
+    bannerPresent: Boolean(banner),
+    hasUnsaved,
+    hasUnsubmitted,
+    hasReviewStatus: hasUnsaved || hasUnsubmitted
+  };
+}
+
+function phabIsElementActuallyVisible(node) {
+  if (!node || !node.isConnected || node.hidden) return false;
+  let current = node;
+  while (current && current !== document.documentElement) {
+    if (current.hidden) return false;
+    const style = window.getComputedStyle?.(current);
+    if (style && (style.display === "none" || style.visibility === "hidden" || style.visibility === "collapse")) {
+      return false;
+    }
+    current = current.parentElement;
+  }
+  return true;
+}
+
+function phabGetDraftDedupKey(node) {
+  if (!node) return null;
+  const keyAttrs = [
+    "data-inline-comment-id",
+    "data-comment-id",
+    "data-commentid",
+    "data-draft-id",
+    "data-id",
+    "data-phid"
+  ];
+  const containers = [node, node.closest("[data-inline-comment-id],[data-comment-id],[data-commentid],[data-draft-id],[data-id],[data-phid]")];
+  for (const container of containers) {
+    if (!container) continue;
+    for (const attr of keyAttrs) {
+      const value = container.getAttribute?.(attr);
+      if (value) return `${attr}:${value}`;
+    }
+  }
+
+  const parseHash = (href) => {
+    if (!href) return null;
+    const hashIdx = href.indexOf("#");
+    if (hashIdx === -1 || hashIdx === href.length - 1) return null;
+    return href.slice(hashIdx + 1).trim() || null;
+  };
+  const anchor =
+    node.querySelector?.("a[href*='#']") ||
+    node.closest?.("a[href*='#']") ||
+    null;
+  if (anchor) {
+    const href = anchor.getAttribute("href") || "";
+    const hash = parseHash(href);
+    if (hash) return `hash:${hash}`;
+    if (href) return `href:${href}`;
+  }
+  return null;
+}
+
+function phabCountVisibleInlineDrafts() {
+  const visibleDraftNodes = Array.from(document.querySelectorAll(".inline-state-is-draft")).filter((node) =>
+    phabIsElementActuallyVisible(node)
+  );
+  const inlineElementNodes = visibleDraftNodes.filter(
+    (node) => !node.classList?.contains("inline-comment-preview")
+  );
+  const nodesForCount = inlineElementNodes.length ? inlineElementNodes : visibleDraftNodes;
+  const uniqueKeys = new Set();
+  const draftSamples = [];
+  let fallbackCount = 0;
+  nodesForCount.forEach((node) => {
+    const key = phabGetDraftDedupKey(node);
+    if (draftSamples.length < 25) {
+      draftSamples.push({
+        key: key || null,
+        text: (node.textContent || "").replace(/\s+/g, " ").trim().slice(0, 120),
+        className: node.className || "",
+        parentClassName: node.parentElement?.className || ""
+      });
+    }
+    if (!key) {
+      fallbackCount += 1;
+      return;
+    }
+    uniqueKeys.add(key);
+  });
+  return {
+    totalVisible: visibleDraftNodes.length,
+    countedVisible: nodesForCount.length,
+    uniqueVisible: uniqueKeys.size + fallbackCount,
+    dedupKeySample: Array.from(uniqueKeys).slice(0, 25),
+    draftSamples
+  };
+}
+
+function phabGetNativeUnsubmittedButtonCandidates() {
+  const reviewStatusPattern = /(?:^|\s)(\d+)\s+(?:Unsubmitted|Unsaved)\b/i;
+  return Array.from(document.querySelectorAll("a, button")).filter((node) => {
+    if (!node || node.dataset?.phabFloatingUnsubmitted === "true") return false;
+    const text = (node.textContent || "").replace(/\s+/g, " ").trim();
+    return reviewStatusPattern.test(text);
+  });
+}
+
+function phabFindNativeVisibleUnsubmittedButton() {
+  const candidates = phabGetNativeUnsubmittedButtonCandidates();
+  return candidates.find((node) => phabIsElementActuallyVisible(node)) || null;
+}
+
+function phabIsElementInViewport(node) {
+  if (!node || !node.getBoundingClientRect) return true;
+  const rect = node.getBoundingClientRect();
+  const viewportWidth = window.innerWidth || document.documentElement?.clientWidth || 0;
+  const viewportHeight = window.innerHeight || document.documentElement?.clientHeight || 0;
+  const hasLayoutInfo =
+    viewportWidth > 0 &&
+    viewportHeight > 0 &&
+    (
+      rect.width > 0 ||
+      rect.height > 0 ||
+      rect.top !== 0 ||
+      rect.right !== 0 ||
+      rect.bottom !== 0 ||
+      rect.left !== 0
+    );
+  if (!hasLayoutInfo) return true;
+  return rect.bottom > 0 && rect.right > 0 && rect.top < viewportHeight && rect.left < viewportWidth;
+}
+
+function phabFindNativeReviewStatusButtonVisibleInViewport() {
+  const candidates = phabGetNativeUnsubmittedButtonCandidates();
+  return (
+    candidates.find((node) => phabIsElementActuallyVisible(node) && phabIsElementInViewport(node)) ||
+    null
+  );
+}
+
+function phabApplyNativeUnsubmittedButtonStyle() {
+  const candidates = phabGetNativeUnsubmittedButtonCandidates();
+  candidates.forEach((node) => {
+    if (!node || !(node instanceof HTMLElement)) return;
+    const text = (node.textContent || "").replace(/\s+/g, " ").trim();
+    if (!/(?:^|\s)(\d+)\s+(?:Unsubmitted|Unsaved)\b/i.test(text)) return;
+    node.style.border = "1px solid #ff4d4d";
+    node.style.boxShadow = "0 0 0 1px rgba(255,60,60,0.35), 0 0 10px rgba(255,20,20,0.45)";
+  });
+}
+
+function phabExtractReviewStatusCountsFromText(text) {
+  if (!text) return null;
+  const normalized = text.replace(/\s+/g, " ").trim();
+  const matches = normalized.matchAll(/(?:^|\s)(\d+)\s+(Unsubmitted|Unsaved)\b/gi);
+  let unsaved = 0;
+  let unsubmitted = 0;
+  let found = false;
+  for (const match of matches) {
+    const count = Number.parseInt(match[1], 10);
+    const kind = (match[2] || "").toLowerCase();
+    if (!Number.isFinite(count) || count < 0) continue;
+    found = true;
+    if (kind === "unsaved") {
+      unsaved += count;
+    } else if (kind === "unsubmitted") {
+      unsubmitted += count;
+    }
+  }
+  if (!found) return null;
+  return {
+    unsaved,
+    unsubmitted,
+    total: unsaved + unsubmitted
+  };
+}
+
+function phabGetUnsubmittedState() {
+  const bannerStatus = phabGetDiffBannerStatus();
+  const candidates = phabGetNativeUnsubmittedButtonCandidates();
+  const nativeVisibleTotals = [];
+  const nativeAnyTotals = [];
+  const nativeAnyUnsavedCounts = [];
+  const nativeAnyUnsubmittedCounts = [];
+  const nativeVisibleUnsavedCounts = [];
+  const nativeVisibleUnsubmittedCounts = [];
+  const candidateSummaries = [];
+  candidates.forEach((node) => {
+    const counts = phabExtractReviewStatusCountsFromText(node.textContent || "");
+    if (!counts || !Number.isFinite(counts.total)) return;
+    const text = (node.textContent || "").replace(/\s+/g, " ").trim();
+    const isVisible = phabIsElementActuallyVisible(node);
+    const inViewport = isVisible ? phabIsElementInViewport(node) : false;
+    candidateSummaries.push({
+      tag: node.tagName?.toLowerCase() || null,
+      id: node.id || null,
+      className: node.className || "",
+      text,
+      hidden: Boolean(node.hidden),
+      inlineStyleDisplay: node.style?.display || "",
+      inlineStyleVisibility: node.style?.visibility || "",
+      isVisible,
+      inViewport,
+      counts
+    });
+    nativeAnyTotals.push(counts.total);
+    nativeAnyUnsavedCounts.push(counts.unsaved);
+    nativeAnyUnsubmittedCounts.push(counts.unsubmitted);
+    if (isVisible) {
+      nativeVisibleTotals.push(counts.total);
+      nativeVisibleUnsavedCounts.push(counts.unsaved);
+      nativeVisibleUnsubmittedCounts.push(counts.unsubmitted);
+    }
+  });
+
+  const inlineDraftCounts = phabCountVisibleInlineDrafts();
+  const inlineDraftVisibleCount = inlineDraftCounts.uniqueVisible;
+  const inlineDraftVisibleRawCount = inlineDraftCounts.totalVisible;
+  const inlineDraftVisibleCountedRawCount = inlineDraftCounts.countedVisible;
+  const inlineEditorVisibleCount = Array.from(
+    document.querySelectorAll(".differential-inline-comment-edit")
+  ).filter((node) => phabIsElementActuallyVisible(node)).length;
+  const activeCommentTextareaCount = Array.from(
+    document.querySelectorAll("textarea.remarkup-assist-textarea, textarea[name='comment']")
+  ).filter((node) => phabIsElementActuallyVisible(node) && (node.value || "").trim() !== "").length;
+  const mainCommentValue = phabGetMainCommentTextarea()?.value || "";
+  const hasMainComment = mainCommentValue.trim() !== "";
+  const unsubmittedSignal = bannerStatus.hasUnsubmitted
+    ? Math.max(inlineDraftVisibleCount, hasMainComment ? 1 : 0)
+    : 0;
+  const unsavedSignal = bannerStatus.hasUnsaved
+    ? Math.max(inlineEditorVisibleCount, activeCommentTextareaCount)
+    : 0;
+  const fallbackUnsavedSignal = Math.max(
+    inlineEditorVisibleCount,
+    activeCommentTextareaCount,
+    hasMainComment ? 1 : 0
+  );
+  const fallbackSignal = inlineDraftVisibleCount + fallbackUnsavedSignal;
+  const nativeVisibleCount = nativeVisibleTotals.length ? nativeVisibleTotals.reduce((a, b) => a + b, 0) : null;
+  const nativeAnyCount = nativeAnyTotals.length ? nativeAnyTotals.reduce((a, b) => a + b, 0) : null;
+  const nativeAnyUnsavedCount = nativeAnyUnsavedCounts.length
+    ? nativeAnyUnsavedCounts.reduce((a, b) => a + b, 0)
+    : 0;
+  const nativeAnyUnsubmittedCount = nativeAnyUnsubmittedCounts.length
+    ? nativeAnyUnsubmittedCounts.reduce((a, b) => a + b, 0)
+    : 0;
+  const nativeVisibleUnsavedCount = nativeVisibleUnsavedCounts.length
+    ? nativeVisibleUnsavedCounts.reduce((a, b) => a + b, 0)
+    : 0;
+  const nativeVisibleUnsubmittedCount = nativeVisibleUnsubmittedCounts.length
+    ? nativeVisibleUnsubmittedCounts.reduce((a, b) => a + b, 0)
+    : 0;
+  const noBannerSignalCount = nativeAnyCount != null
+    ? (fallbackSignal > 0 ? Math.min(nativeAnyCount, fallbackSignal) : 0)
+    : fallbackSignal;
+  const heuristicCount = bannerStatus.hasReviewStatus
+    ? Math.max(unsubmittedSignal + unsavedSignal, (bannerStatus.hasUnsubmitted || bannerStatus.hasUnsaved) ? 1 : 0)
+    : noBannerSignalCount;
+  const heuristicHasUnsubmitted = heuristicCount > 0;
+
+  let hasUnsubmitted = false;
+  let countText = null;
+  let selectedSource = "none";
+  let selectedCount = 0;
+  if (nativeVisibleCount != null) {
+    hasUnsubmitted = nativeVisibleCount > 0;
+    selectedSource = "native-visible";
+    selectedCount = nativeVisibleCount;
+    if (hasUnsubmitted) {
+      countText = `${nativeVisibleCount} Unsubmitted`;
+      phabLastKnownUnsubmittedCountText = countText;
+    }
+  } else if (bannerStatus.hasReviewStatus && nativeAnyCount != null) {
+    const nativeBannerCount =
+      (bannerStatus.hasUnsaved ? nativeAnyUnsavedCount : 0) +
+      (bannerStatus.hasUnsubmitted ? nativeAnyUnsubmittedCount : 0);
+    const combinedCount = heuristicHasUnsubmitted
+      ? Math.max(nativeBannerCount, heuristicCount)
+      : nativeBannerCount;
+    hasUnsubmitted = combinedCount > 0;
+    selectedSource = "native-hidden-banner-aware";
+    selectedCount = combinedCount;
+    if (hasUnsubmitted) {
+      countText = `${combinedCount} Unsubmitted`;
+      phabLastKnownUnsubmittedCountText = countText;
+    }
+  } else if (heuristicHasUnsubmitted) {
+    hasUnsubmitted = true;
+    countText = `${Math.max(heuristicCount, 1)} Unsubmitted`;
+    phabLastKnownUnsubmittedCountText = countText;
+    selectedSource = "heuristic";
+    selectedCount = heuristicCount;
+  }
+
+  const diagnostics = {
+    hasUnsubmitted,
+    countText,
+    selectedSource,
+    selectedCount,
+    nativeVisibleCount,
+    nativeAnyCount,
+    nativeAnyUnsavedCount,
+    nativeAnyUnsubmittedCount,
+    nativeVisibleUnsavedCount,
+    nativeVisibleUnsubmittedCount,
+    nativeCandidateCount: candidates.length,
+    bannerPresent: bannerStatus.bannerPresent,
+    bannerHasUnsaved: bannerStatus.hasUnsaved,
+    bannerHasUnsubmitted: bannerStatus.hasUnsubmitted,
+    bannerHasReviewStatus: bannerStatus.hasReviewStatus,
+    inlineDraftVisibleCount,
+    inlineDraftVisibleRawCount,
+    inlineDraftVisibleCountedRawCount,
+    inlineDraftDedupKeySample: inlineDraftCounts.dedupKeySample,
+    inlineDraftSamples: inlineDraftCounts.draftSamples,
+    inlineEditorVisibleCount,
+    activeCommentTextareaCount,
+    unsubmittedSignal,
+    unsavedSignal,
+    fallbackUnsavedSignal,
+    fallbackSignal,
+    noBannerSignalCount,
+    hasMainComment,
+    mainCommentLength: mainCommentValue.length,
+    heuristicCount,
+    candidateSummaries
+  };
+  return diagnostics;
+}
+
+function phabLogUnsubmittedDiagnostics(diag) {
+  const signature = JSON.stringify({
+    hasUnsubmitted: diag.hasUnsubmitted,
+    selectedSource: diag.selectedSource,
+    selectedCount: diag.selectedCount,
+    nativeVisibleCount: diag.nativeVisibleCount,
+    nativeAnyCount: diag.nativeAnyCount,
+    bannerPresent: diag.bannerPresent,
+    bannerHasUnsaved: diag.bannerHasUnsaved,
+    bannerHasUnsubmitted: diag.bannerHasUnsubmitted,
+    inlineDraftVisibleCount: diag.inlineDraftVisibleCount,
+    inlineEditorVisibleCount: diag.inlineEditorVisibleCount,
+    activeCommentTextareaCount: diag.activeCommentTextareaCount,
+    hasMainComment: diag.hasMainComment
+  });
+  if (signature === phabLastUnsubmittedDebugSignature) return;
+  phabLastUnsubmittedDebugSignature = signature;
+  console.debug("[MozHelper][Phabricator][Unsubmitted]", {
+    seq: diag.seq,
+    reason: diag.reason,
+    location: diag.location,
+    hasUnsubmitted: diag.hasUnsubmitted,
+    countText: diag.countText,
+    selectedSource: diag.selectedSource,
+    selectedCount: diag.selectedCount,
+    nativeVisibleCount: diag.nativeVisibleCount,
+    nativeAnyCount: diag.nativeAnyCount,
+    nativeAnyUnsavedCount: diag.nativeAnyUnsavedCount,
+    nativeAnyUnsubmittedCount: diag.nativeAnyUnsubmittedCount,
+    bannerPresent: diag.bannerPresent,
+    bannerHasUnsaved: diag.bannerHasUnsaved,
+    bannerHasUnsubmitted: diag.bannerHasUnsubmitted,
+    inlineDraftVisibleCount: diag.inlineDraftVisibleCount,
+    inlineEditorVisibleCount: diag.inlineEditorVisibleCount,
+    activeCommentTextareaCount: diag.activeCommentTextareaCount,
+    hasMainComment: diag.hasMainComment
+  });
+}
+
+function phabGetUnsubmittedFaviconHref() {
+  if (phabRuntime?.runtime?.getURL) {
+    return phabRuntime.runtime.getURL(PHAB_UNSUBMITTED_FAVICON_PATH);
+  }
+  return PHAB_UNSUBMITTED_FAVICON;
+}
+
+function phabGetFloatingUnsubmittedTopPx() {
+  const defaultTopPx = 18;
+  const toolbar = document.querySelector(".phabricator-main-menu");
+  if (!toolbar?.getBoundingClientRect) return defaultTopPx;
+  const rect = toolbar.getBoundingClientRect();
+  if (!rect || rect.height <= 0 || rect.bottom <= 0) return defaultTopPx;
+  return Math.max(defaultTopPx, Math.ceil(rect.bottom + 10));
+}
+
+function phabApplyFloatingUnsubmittedPosition(button) {
+  if (!button?.style) return;
+  button.style.top = `${phabGetFloatingUnsubmittedTopPx()}px`;
+}
+
+function phabEnsureUnsubmittedFloatingButton() {
+  const duplicates = Array.from(document.querySelectorAll('[data-phab-floating-unsubmitted="true"]'));
+  if (duplicates.length > 1) {
+    duplicates.slice(1).forEach((node) => node.remove());
+  }
+  if (phabUnsubmittedFloatingButton) {
+    const sameDocument = phabUnsubmittedFloatingButton.ownerDocument === document;
+    if (phabUnsubmittedFloatingButton.isConnected && sameDocument) {
+      return phabUnsubmittedFloatingButton;
+    }
+    phabCleanupUnsubmittedFloatingButton();
+  }
+  const existing = document.querySelector('[data-phab-floating-unsubmitted="true"]');
+  if (existing) {
+    phabUnsubmittedFloatingButton = existing;
+    return existing;
+  }
+  const button = document.createElement("button");
+  button.type = "button";
+  button.dataset.phabFloatingUnsubmitted = "true";
+  button.hidden = true;
+  Object.assign(button.style, {
+    position: "fixed",
+    top: `${phabGetFloatingUnsubmittedTopPx()}px`,
+    right: "18px",
+    zIndex: "2147483003",
+    display: "flex",
+    alignItems: "center",
+    gap: "7px",
+    padding: "6px 12px",
+    borderRadius: "999px",
+    border: "1px solid #ff5a5a",
+    background: "rgba(34, 8, 8, 0.95)",
+    color: "#ffe4e6",
+    fontSize: "12px",
+    fontWeight: "600",
+    lineHeight: "1",
+    boxShadow: "0 0 0 1px rgba(255,40,40,0.35), 0 0 12px rgba(255,30,30,0.55), 0 0 24px rgba(255,0,0,0.35)",
+    cursor: "pointer",
+    pointerEvents: "auto"
+  });
+
+  const icon = document.createElement("span");
+  icon.className = "phui-icon-view phui-font-fa visual-only fa-comment";
+  icon.setAttribute("aria-hidden", "true");
+  icon.style.fontSize = "11px";
+
+  const label = document.createElement("span");
+  label.dataset.phabFloatingUnsubmittedLabel = "true";
+  label.textContent = "1 Unsubmitted";
+
+  button.append(icon, label);
+  button.addEventListener("mouseenter", () => {
+    button.style.boxShadow = "0 0 0 1px rgba(255,70,70,0.45), 0 0 16px rgba(255,50,50,0.7), 0 0 30px rgba(255,20,20,0.45)";
+  });
+  button.addEventListener("mouseleave", () => {
+    button.style.boxShadow = "0 0 0 1px rgba(255,40,40,0.35), 0 0 12px rgba(255,30,30,0.55), 0 0 24px rgba(255,0,0,0.35)";
+  });
+  button.addEventListener("click", () => {
+    const native = phabFindNativeVisibleUnsubmittedButton() || phabGetNativeUnsubmittedButtonCandidates()[0];
+    if (native) {
+      native.click();
+      return;
+    }
+    const fallbackTarget = document.querySelector(
+      ".inline-state-is-draft, .differential-inline-comment-edit, textarea[name='comment']"
+    );
+    if (fallbackTarget?.scrollIntoView) {
+      fallbackTarget.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  });
+
+  if (document.body) {
+    document.body.appendChild(button);
+  }
+  phabUnsubmittedFloatingButton = button;
+  return button;
+}
+
+function phabCleanupUnsubmittedFloatingButton() {
+  document
+    .querySelectorAll('[data-phab-floating-unsubmitted="true"]')
+    .forEach((node) => node.remove());
+  phabUnsubmittedFloatingButton = null;
+}
+
+function phabGetTitleWithoutUnsubmittedMarker(titleText = document.title) {
+  if (!titleText) return "";
+  return titleText.replace(/^\*\*\s*/, "").replace(/\s\*\*$/, "");
+}
+
+function phabHasUnsubmittedChanges() {
+  return phabGetUnsubmittedState().hasUnsubmitted;
+}
+
+function phabUpdateUnsubmittedIndicator(reason = "manual") {
+  if (!phabUnsubmittedIndicatorEnabled) return;
+  if (!phabIsDifferentialRevisionPage()) {
+    phabDisableUnsubmittedIndicator();
+    return;
+  }
+  phabUnsubmittedUpdateSequence += 1;
+  const unsubmittedState = phabGetUnsubmittedState();
+  phabLogUnsubmittedDiagnostics({
+    seq: phabUnsubmittedUpdateSequence,
+    reason,
+    location: window.location?.href || null,
+    ...unsubmittedState
+  });
+  phabApplyNativeUnsubmittedButtonStyle();
+  const hasUnsubmitted = unsubmittedState.hasUnsubmitted;
+  const floatingButton = phabEnsureUnsubmittedFloatingButton();
+  if (floatingButton) {
+    phabApplyFloatingUnsubmittedPosition(floatingButton);
+    const label = floatingButton.querySelector('[data-phab-floating-unsubmitted-label="true"]');
+    if (label) {
+      label.textContent = unsubmittedState.countText || "1 Unsubmitted";
+    }
+    const nativeVisibleButton = phabFindNativeReviewStatusButtonVisibleInViewport();
+    const shouldShowFloating = hasUnsubmitted && !nativeVisibleButton;
+    floatingButton.hidden = !shouldShowFloating;
+    floatingButton.style.display = shouldShowFloating ? "flex" : "none";
+    document
+      .querySelectorAll('[data-phab-floating-unsubmitted="true"]')
+      .forEach((node) => {
+        if (node === floatingButton) return;
+        node.hidden = true;
+        node.style.display = "none";
+      });
+  }
+
+  const cleanTitle = phabGetTitleWithoutUnsubmittedMarker();
+  const nextTitle = hasUnsubmitted ? `** ${cleanTitle} **` : cleanTitle;
+  if (document.title !== nextTitle) {
+    document.title = nextTitle;
+  }
+
+  const favicon = phabFindFaviconLink();
+  if (!favicon) return;
+  if (hasUnsubmitted) {
+    const unsubmittedHref = phabGetUnsubmittedFaviconHref();
+    if (!phabOriginalFaviconHref || favicon.href !== unsubmittedHref) {
+      phabOriginalFaviconHref = favicon.href;
+    }
+    favicon.href = unsubmittedHref;
+  } else if (phabOriginalFaviconHref) {
+    favicon.href = phabOriginalFaviconHref;
+  }
+}
+
+function phabQueueUnsubmittedIndicatorUpdate(reason = "queue") {
+  if (phabUnsubmittedIndicatorPending) {
+    if (phabUnsubmittedPendingReason) {
+      const reasons = new Set(phabUnsubmittedPendingReason.split(","));
+      reasons.add(reason);
+      phabUnsubmittedPendingReason = Array.from(reasons).join(",");
+    } else {
+      phabUnsubmittedPendingReason = reason;
+    }
+    return;
+  }
+  phabUnsubmittedIndicatorPending = true;
+  phabUnsubmittedPendingReason = reason;
+  requestAnimationFrame(() => {
+    const nextReason = phabUnsubmittedPendingReason || "raf";
+    phabUnsubmittedPendingReason = null;
+    phabUnsubmittedIndicatorPending = false;
+    phabUpdateUnsubmittedIndicator(nextReason);
+  });
+}
+
+function phabEnsureUnsubmittedIndicatorObserver() {
+  if (phabUnsubmittedIndicatorObserver || !document.body) return;
+  phabUnsubmittedIndicatorObserver = new MutationObserver(() => {
+    phabQueueUnsubmittedIndicatorUpdate("mutation");
+  });
+  phabUnsubmittedIndicatorObserver.observe(document.body, {
+    subtree: true,
+    childList: true,
+    characterData: true,
+    attributes: true,
+    attributeFilter: ["class", "style", "hidden"]
+  });
+}
+
+function phabHandleUnsubmittedScroll() {
+  phabQueueUnsubmittedIndicatorUpdate("scroll");
+}
+
+function phabHandleUnsubmittedResize() {
+  phabQueueUnsubmittedIndicatorUpdate("resize");
+}
+
+function phabBindUnsubmittedViewportListeners() {
+  if (phabUnsubmittedViewportListenersBound) return;
+  window.addEventListener("scroll", phabHandleUnsubmittedScroll, { passive: true });
+  window.addEventListener("resize", phabHandleUnsubmittedResize);
+  phabUnsubmittedViewportListenersBound = true;
+}
+
+function phabUnbindUnsubmittedViewportListeners() {
+  if (!phabUnsubmittedViewportListenersBound) return;
+  window.removeEventListener("scroll", phabHandleUnsubmittedScroll);
+  window.removeEventListener("resize", phabHandleUnsubmittedResize);
+  phabUnsubmittedViewportListenersBound = false;
+}
+
+function phabHandleUnsubmittedInput(event) {
+  const target = event?.target;
+  if (!(target instanceof HTMLTextAreaElement)) return;
+  if (target.name !== "comment" && !target.classList.contains("remarkup-assist-textarea")) return;
+  phabQueueUnsubmittedIndicatorUpdate("input");
+}
+
+function phabBindUnsubmittedInputListener() {
+  if (phabUnsubmittedInputListenerBound) return;
+  document.addEventListener("input", phabHandleUnsubmittedInput, true);
+  phabUnsubmittedInputListenerBound = true;
+}
+
+function phabUnbindUnsubmittedInputListener() {
+  if (!phabUnsubmittedInputListenerBound) return;
+  document.removeEventListener("input", phabHandleUnsubmittedInput, true);
+  phabUnsubmittedInputListenerBound = false;
+}
+
+function phabDisableUnsubmittedIndicator() {
+  if (phabUnsubmittedIndicatorObserver) {
+    phabUnsubmittedIndicatorObserver.disconnect();
+    phabUnsubmittedIndicatorObserver = null;
+  }
+  phabUnbindUnsubmittedViewportListeners();
+  phabUnbindUnsubmittedInputListener();
+  phabCleanupUnsubmittedFloatingButton();
+  phabLastKnownUnsubmittedCountText = null;
+  phabLastUnsubmittedDebugSignature = null;
+  const cleanTitle = phabGetTitleWithoutUnsubmittedMarker();
+  if (document.title !== cleanTitle) {
+    document.title = cleanTitle;
+  }
+  const favicon = phabFindFaviconLink();
+  if (favicon && phabOriginalFaviconHref) {
+    favicon.href = phabOriginalFaviconHref;
+  }
+}
 
 function phabIsVideoUrl(url) {
   const lower = url.toLowerCase();
@@ -826,6 +1496,11 @@ if (typeof globalThis !== "undefined" && typeof globalThis.__mozHelperExposePhab
     phabHasUnattachedFiles,
     phabFindUnattachedFileLink,
     phabUpdateFileNotAttachedNotice,
+    phabUpdateUnsubmittedIndicator,
+    phabProcessPage,
+    phabSetUnsubmittedIndicatorEnabled(value) {
+      phabUnsubmittedIndicatorEnabled = Boolean(value);
+    },
     phabSetFileNotAttachedEnabled(value) {
       phabFileNotAttachedEnabled = Boolean(value);
     },
@@ -933,6 +1608,14 @@ function phabProcessPage() {
   phabAttachPasteHandlers();
   phabUpdateLatestTryLink();
   phabProcessCommentTryLinks();
+  if (phabUnsubmittedIndicatorEnabled && phabIsDifferentialRevisionPage()) {
+    phabEnsureUnsubmittedIndicatorObserver();
+    phabBindUnsubmittedViewportListeners();
+    phabBindUnsubmittedInputListener();
+    phabQueueUnsubmittedIndicatorUpdate();
+  } else {
+    phabDisableUnsubmittedIndicator();
+  }
   phabUpdateFileNotAttachedNotice();
 }
 
@@ -955,6 +1638,7 @@ function phabInit() {
     phabPasteEnabled = items.enablePhabricatorPaste ?? true;
     phabTryLinkEnabled = items.enablePhabricatorTryLinks ?? true;
     phabTryCommentIconsEnabled = items.enablePhabricatorTryCommentIcons ?? true;
+    phabUnsubmittedIndicatorEnabled = items.enablePhabricatorUnsubmittedIndicator ?? true;
     phabFileNotAttachedEnabled = items.enablePhabricatorFileNotAttachedNotice ?? true;
     phabRunInitialPasses();
   });
@@ -975,6 +1659,17 @@ function phabInit() {
     if (changes.enablePhabricatorTryCommentIcons) {
       phabTryCommentIconsEnabled = changes.enablePhabricatorTryCommentIcons.newValue;
       phabProcessCommentTryLinks();
+    }
+    if (changes.enablePhabricatorUnsubmittedIndicator) {
+      phabUnsubmittedIndicatorEnabled = changes.enablePhabricatorUnsubmittedIndicator.newValue;
+      if (phabUnsubmittedIndicatorEnabled && phabIsDifferentialRevisionPage()) {
+        phabEnsureUnsubmittedIndicatorObserver();
+        phabBindUnsubmittedViewportListeners();
+        phabBindUnsubmittedInputListener();
+        phabQueueUnsubmittedIndicatorUpdate();
+      } else {
+        phabDisableUnsubmittedIndicator();
+      }
     }
     if (changes.enablePhabricatorFileNotAttachedNotice) {
       phabFileNotAttachedEnabled = changes.enablePhabricatorFileNotAttachedNotice.newValue;

@@ -194,6 +194,16 @@ describe("Treeherder try status helper", () => {
     expect(result.summary.failedJobs).to.equal(1);
   });
 
+  it("ignores non-blocking tier failures", () => {
+    const result = assessTryJobs([
+      { state: "completed", result: "success", job_type_name: "linux-test", tier: 1 },
+      { state: "completed", result: "testfailed", job_type_name: "fuzzing-simple", tier: 3 }
+    ]);
+    expect(result.status).to.equal("success");
+    expect(result.summary.failedJobs).to.equal(0);
+    expect(result.failedJobs).to.have.length(0);
+  });
+
   it("handles malformed inputs", () => {
     const result = assessTryJobs(null);
     expect(result.reason).to.equal("missing-jobs");

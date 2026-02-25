@@ -6,6 +6,7 @@ document.addEventListener("DOMContentLoaded", () => {
     enablePhabricatorPaste: document.getElementById("enablePhabricatorPaste"),
     enablePhabricatorTryLinks: document.getElementById("enablePhabricatorTryLinks"),
     enablePhabricatorTryCommentIcons: document.getElementById("enablePhabricatorTryCommentIcons"),
+    enablePhabricatorUnsubmittedIndicator: document.getElementById("enablePhabricatorUnsubmittedIndicator"),
     enablePhabricatorFileNotAttachedNotice: document.getElementById("enablePhabricatorFileNotAttachedNotice"),
     enableBugzilla: document.getElementById("enableBugzilla"),
     enableTreeherder: document.getElementById("enableTreeherder"),
