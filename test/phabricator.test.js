@@ -280,6 +280,57 @@ describe("Phabricator try link extraction", () => {
     expect(result.landoCommitId).to.equal("87");
   });
 
+  it("extracts try links that only appear in timeline summary content", () => {
+    const summaryLink =
+      "https://treeherder.mozilla.org/#/jobs?repo=try&revision=sum123&landoCommitID=11";
+    document.body.innerHTML = `
+      <div class="phui-timeline-shell">
+        <div class="phui-timeline-title">
+          <a class="phui-link-person" href="/p/alice/">Alice</a>
+        </div>
+        <div class="phui-timeline-extra">
+          Summary update:
+          <a href="${summaryLink}">Try run</a>
+        </div>
+        <a class="phabricator-anchor-view" id="comment-summary"></a>
+      </div>
+    `;
+    const result = phabTestApi.phabFindLatestTryLinkData();
+    expect(result.url).to.equal(summaryLink);
+    expect(result.commentUrl).to.equal(
+      "https://phabricator.services.mozilla.com/D123#comment-summary"
+    );
+    expect(result.repo).to.equal("try");
+    expect(result.revision).to.equal("sum123");
+    expect(result.landoCommitId).to.equal("11");
+  });
+
+  it("extracts try links from the diff summary property block", () => {
+    const summaryTryLink =
+      "https://treeherder.mozilla.org/jobs?repo=try&revision=a75c53bce615ca85114213272d49929d4aba745b";
+    document.body.innerHTML = `
+      <div class="phui-property-list-section">
+        <div class="phui-property-list-section-header">
+          <span>Summary</span>
+        </div>
+        <div class="phui-property-list-text-content">
+          <div class="phabricator-remarkup">
+            <p>
+              TRY:: <a href="${summaryTryLink}" class="remarkup-link">try</a>
+            </p>
+          </div>
+        </div>
+      </div>
+    `;
+    const result = phabTestApi.phabFindLatestTryLinkData();
+    expect(result.url).to.equal(summaryTryLink);
+    expect(result.commentUrl).to.equal(null);
+    expect(result.commentId).to.equal(null);
+    expect(result.repo).to.equal("try");
+    expect(result.revision).to.equal("a75c53bce615ca85114213272d49929d4aba745b");
+    expect(result.landoCommitId).to.equal(null);
+  });
+
   it("shows a file-not-attached notice with action buttons", () => {
     document.body.innerHTML = `
       <div class="phui-curtain-object-ref-view phui-curtain-object-ref-view-exiled">
@@ -310,7 +361,8 @@ describe("Phabricator try link extraction", () => {
     `;
     expect(phabTestApi.phabHasUnattachedFiles()).to.equal(true);
     const link = document.querySelector('a[data-sigil="workflow"]');
-    link.addEventListener("click", () => {
+    link.addEventListener("click", (event) => {
+      event.preventDefault();
       clicked = true;
     });
     phabTestApi.phabUpdateFileNotAttachedNotice();
