@@ -1238,7 +1238,9 @@ window.addEventListener("resize", phabHideTryTooltip);
 document.addEventListener("keydown", phabHideTryTooltip, true);
 
 function phabProcessCommentTryLinks() {
-  const anchors = document.querySelectorAll(".transaction-comment a[href]");
+  const anchors = document.querySelectorAll(
+    ".transaction-comment a[href], .phui-property-list-section .phui-property-list-text-content a[href]"
+  );
   if (!phabTryCommentIconsEnabled) {
     anchors.forEach((anchor) => phabRemoveCommentTryIcon(anchor));
     return;
@@ -1448,16 +1450,46 @@ function phabIsReviewbotComment(eventNode) {
   return /\/p\/reviewbot\/?(?:$|[?#])/i.test(href);
 }
 
+function phabFindSummaryTryLinkData() {
+  const sections = document.querySelectorAll(".phui-property-list-section");
+  for (const section of sections) {
+    const header = section.querySelector(".phui-property-list-section-header");
+    if (!header || !/\bsummary\b/i.test(header.textContent || "")) continue;
+    const links = Array.from(section.querySelectorAll("a[href]")).filter((anchor) =>
+      PHAB_TRY_LINK_PATTERN.test(anchor.href)
+    );
+    if (!links.length) continue;
+    const tryLink = links[links.length - 1];
+    const parsedUrl = (() => {
+      try {
+        return new URL(tryLink.href);
+      } catch (error) {
+        return null;
+      }
+    })();
+    const { repo, revision, landoCommitId } = parsedUrl
+      ? phabParseTryLinkParams(parsedUrl)
+      : { repo: null, revision: null, landoCommitId: null };
+    return {
+      url: tryLink.href,
+      commentUrl: null,
+      commentId: null,
+      repo,
+      revision,
+      landoCommitId
+    };
+  }
+  return null;
+}
+
 function phabFindLatestTryLinkData() {
   const timelineEvents = document.querySelectorAll(".phui-timeline-shell");
   let latest = null;
   const baseUrl = `${window.location.origin}${window.location.pathname}${window.location.search}`;
 
   timelineEvents.forEach((eventNode) => {
-    const comment = eventNode.querySelector(".transaction-comment");
-    if (!comment) return;
     if (phabIsReviewbotComment(eventNode)) return;
-    const links = Array.from(comment.querySelectorAll("a[href]")).filter((anchor) =>
+    const links = Array.from(eventNode.querySelectorAll("a[href]")).filter((anchor) =>
       PHAB_TRY_LINK_PATTERN.test(anchor.href)
     );
     if (!links.length) return;
@@ -1484,7 +1516,7 @@ function phabFindLatestTryLinkData() {
     };
   });
 
-  return latest;
+  return latest || phabFindSummaryTryLinkData();
 }
 
 if (typeof globalThis !== "undefined" && typeof globalThis.__mozHelperExposePhabForTests === "function") {
