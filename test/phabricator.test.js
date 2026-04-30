@@ -247,7 +247,7 @@ describe("Phabricator try link extraction", () => {
 
   it("returns the latest non-reviewbot try link even when reviewbot comments last", () => {
     const reviewerLink =
-      "https://treeherder.mozilla.org/#/jobs?repo=try&revision=def456&landoCommitID=87";
+      "https://treeherder.mozilla.org/#/jobs?repo=try&revision=def456&landoCommitID=87&landoInstance=lando-prod-2025";
     const reviewbotLink =
       "https://treeherder.mozilla.org/#/jobs?repo=try&revision=zzz999&landoCommitID=99";
     document.body.innerHTML = `
@@ -278,6 +278,29 @@ describe("Phabricator try link extraction", () => {
     expect(result.repo).to.equal("try");
     expect(result.revision).to.equal("def456");
     expect(result.landoCommitId).to.equal("87");
+    expect(result.landoInstance).to.equal("lando-prod-2025");
+  });
+
+  it("extracts lando-only try links with their lando instance", () => {
+    const tryLink =
+      "https://treeherder.mozilla.org/jobs?repo=try&landoInstance=lando-prod-2025&landoCommitID=41159";
+    document.body.innerHTML = `
+      <div class="phui-timeline-shell">
+        <div class="phui-timeline-title">
+          <a class="phui-link-person" href="/p/alice/">Alice</a>
+        </div>
+        <div class="transaction-comment">
+          <a href="${tryLink}">try</a>
+        </div>
+        <a class="phabricator-anchor-view" id="comment-lando"></a>
+      </div>
+    `;
+    const result = phabTestApi.phabFindLatestTryLinkData();
+    expect(result.url).to.equal(tryLink);
+    expect(result.repo).to.equal("try");
+    expect(result.revision).to.equal(null);
+    expect(result.landoCommitId).to.equal("41159");
+    expect(result.landoInstance).to.equal("lando-prod-2025");
   });
 
   it("extracts try links that only appear in timeline summary content", () => {

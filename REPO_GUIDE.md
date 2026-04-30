@@ -29,7 +29,7 @@ Non-goals:
 - `manifest.json`: extension manifest, permissions, content script wiring.
 - `background.js`: background script handling network-backed message actions:
   - Bugzilla bug fetch (`moz-helper:getBugInfo`)
-  - Try status fetch/assessment (`moz-helper:getTryStatus`)
+  - Try status fetch/assessment (`moz-helper:getTryStatus`), including `landoCommitID` resolution through the URL's Lando instance (`lando-prod-2025` uses `https://lando.moz.tools`; legacy/default uses `https://api.lando.services.mozilla.com`)
 - `content/`: runtime content scripts injected per site:
   - `content/gmail.js`
   - `content/bugzilla.js`
@@ -40,6 +40,7 @@ Non-goals:
   - `src/bugzilla/*`
   - `src/phabricator/*`
   - `src/treeherder/*`
+    - `src/treeherder/lando.js`: testable Lando instance URL/cache-key helpers mirrored by `background.js`
   - `src/taskcluster/*`
   - `src/utils/url.js`
 - `test/`: Mocha unit/integration-style tests for helper logic and selected content-script behavior.
@@ -104,6 +105,7 @@ High-impact rule for contributors:
   - Example pairs:
   - `content/treeherder.js` <-> `src/treeherder/testlab.js`
   - `background.js` try-status logic <-> `src/treeherder/tryStatus.js`
+  - `background.js` Lando instance URL/cache-key logic <-> `src/treeherder/lando.js`
   - `content/bugzilla.js` / `content/phabricator.js` paste logic <-> `src/bugzilla/mdPaste.js` (+ re-export in `src/phabricator/mdPaste.js`)
   - `content/gmail.js` tooltip/linkify behavior <-> `src/gmail/*`
 
@@ -143,6 +145,14 @@ Local extension debugging:
 2. Load temporary add-on from `manifest.json` in `about:debugging#/runtime/this-firefox`
 3. Open target pages (Gmail/Phabricator/Bugzilla/Treeherder)
 
+Firefox Nightly one-command local run:
+
+```bash
+npx web-ext run --firefox="/Applications/Firefox Nightly.app/Contents/MacOS/firefox" --source-dir .
+```
+
+Run it from the repo root after `npm install`. This opens a temporary Nightly profile with the extension loaded from the current source tree; keep the command running while testing.
+
 Runtime logging hotspots:
 
 - `content/treeherder.js`: debug logs prefixed with `[MozHelper][Treeherder]`
@@ -155,6 +165,7 @@ Frequent failure modes:
 - Logic changed only in `src/` or only in `content/` (desync)
 - Feature appears disabled due to `storage.sync` state
 - Host permission or URL pattern mismatch in `manifest.json`
+- Lando instance mismatch for Treeherder links that only carry `landoCommitID`/`landoInstance`
 
 Useful checks:
 

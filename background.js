@@ -5,6 +5,10 @@ const tryStatusPending = new Map();
 const landoRevisionCache = new Map();
 const landoRevisionPending = new Map();
 const TREEHERDER_BASE = "https://treeherder.mozilla.org";
+const DEFAULT_LANDO_API_BASE = "https://api.lando.services.mozilla.com";
+const LANDO_INSTANCE_API_BASES = {
+  "lando-prod-2025": "https://lando.moz.tools"
+};
 const TRY_SUCCESS_RESULTS = new Set(["success", "skipped"]);
 const TRY_ACTIVE_STATES = new Set(["pending", "running", "coalesced", "queued"]);
 const TRY_PENDING_RESULTS = new Set(["unknown"]);
@@ -213,11 +217,12 @@ runtime.runtime.onMessage.addListener((message, sender, sendResponse) => {
     const revision = String(message.revision || "").trim();
     const landoCommitIdRaw = message.landoCommitId == null ? "" : String(message.landoCommitId).trim();
     const landoCommitId = landoCommitIdRaw || null;
+    const landoInstance = normalizeLandoInstance(message.landoInstance);
     if (!repo || (!revision && !landoCommitId)) {
       sendResponse({ status: null, reason: "missing-params" });
       return;
     }
-    fetchTryStatus(repo, revision, landoCommitId)
+    fetchTryStatus(repo, revision, landoCommitId, landoInstance)
       .then((result) => sendResponse(result || { status: null, reason: "unknown" }))
       .catch((error) => {
         console.error("Treeherder try status fetch failed:", error);
@@ -301,13 +306,18 @@ function assessTryJobs(jobs) {
   return { status: "success", reason: null, summary, failedJobs: failedJobDetails, pendingJobs: pendingJobDetails };
 }
 
-async function fetchTryStatus(repo, revision, landoCommitId = null) {
+async function fetchTryStatus(repo, revision, landoCommitId = null, landoInstance = null) {
+  const normalizedLandoInstance = normalizeLandoInstance(landoInstance);
   let resolvedRevision = revision;
   if (!resolvedRevision && landoCommitId) {
-    resolvedRevision = await resolveRevisionFromLando(landoCommitId);
+    resolvedRevision = await resolveRevisionFromLando(landoCommitId, normalizedLandoInstance);
   }
   if (!resolvedRevision) {
-    console.warn("[MozHelper][Treeherder] Missing revision for try status lookup", { repo, landoCommitId });
+    console.warn("[MozHelper][Treeherder] Missing revision for try status lookup", {
+      repo,
+      landoCommitId,
+      landoInstance: normalizedLandoInstance
+    });
     return { status: null, reason: "missing-revision" };
   }
   const key = `${repo}:${resolvedRevision}`;
@@ -401,26 +411,58 @@ async function fetchTryStatus(repo, revision, landoCommitId = null) {
   return promise;
 }
 
-async function resolveRevisionFromLando(landoCommitId) {
+function normalizeLandoInstance(value) {
+  if (value == null) {
+    return null;
+  }
+  const normalized = String(value).trim().toLowerCase();
+  return normalized || null;
+}
+
+function getLandoApiBaseUrl(landoInstance) {
+  const normalized = normalizeLandoInstance(landoInstance);
+  return LANDO_INSTANCE_API_BASES[normalized] || DEFAULT_LANDO_API_BASE;
+}
+
+function buildLandoLandingJobUrl(landoCommitId, landoInstance) {
+  const id = String(landoCommitId || "").trim();
+  if (!id) {
+    return null;
+  }
+  const apiBase = getLandoApiBaseUrl(landoInstance);
+  const params = new URLSearchParams({
+    lando_revision_id: id,
+    count: "1"
+  });
+  const encodedId = encodeURIComponent(id);
+  const path = apiBase === DEFAULT_LANDO_API_BASE ? `/landing_jobs/${encodedId}` : `/landing_jobs/${encodedId}/`;
+  return `${apiBase}${path}?${params.toString()}`;
+}
+
+function buildLandoRevisionCacheKey(landoCommitId, landoInstance) {
+  return `${getLandoApiBaseUrl(landoInstance)}:${String(landoCommitId || "").trim()}`;
+}
+
+async function resolveRevisionFromLando(landoCommitId, landoInstance = null) {
   if (!landoCommitId) {
     return null;
   }
-  if (landoRevisionCache.has(landoCommitId)) {
-    return landoRevisionCache.get(landoCommitId);
+  const normalizedLandoInstance = normalizeLandoInstance(landoInstance);
+  const cacheKey = buildLandoRevisionCacheKey(landoCommitId, normalizedLandoInstance);
+  if (landoRevisionCache.has(cacheKey)) {
+    return landoRevisionCache.get(cacheKey);
   }
-  if (landoRevisionPending.has(landoCommitId)) {
-    return landoRevisionPending.get(landoCommitId);
+  if (landoRevisionPending.has(cacheKey)) {
+    return landoRevisionPending.get(cacheKey);
   }
   const promise = (async () => {
     try {
-      const params = new URLSearchParams({
-        lando_revision_id: landoCommitId,
-        count: "1"
+      const url = buildLandoLandingJobUrl(landoCommitId, normalizedLandoInstance);
+      console.debug("[MozHelper][Lando] Resolving revision", {
+        landoCommitId,
+        landoInstance: normalizedLandoInstance,
+        url
       });
-      const url = `https://api.lando.services.mozilla.com/landing_jobs/${encodeURIComponent(
-        landoCommitId
-      )}?${params.toString()}`;
-      console.debug("[MozHelper][Lando] Resolving revision", { landoCommitId, url });
       const res = await fetch(url, {
         credentials: "omit",
         headers: {
@@ -444,28 +486,39 @@ async function resolveRevisionFromLando(landoCommitId) {
         data?.revision ||
         null;
       if (!commitId) {
-        console.warn("[MozHelper][Lando] Missing commit ID in response", { landoCommitId });
+        console.warn("[MozHelper][Lando] Missing commit ID in response", {
+          landoCommitId,
+          landoInstance: normalizedLandoInstance
+        });
         return null;
       }
-      console.debug("[MozHelper][Lando] Resolved revision", { landoCommitId, revision: commitId });
+      console.debug("[MozHelper][Lando] Resolved revision", {
+        landoCommitId,
+        landoInstance: normalizedLandoInstance,
+        revision: commitId
+      });
       return commitId;
     } catch (error) {
-      console.warn("[MozHelper][Lando] Failed to resolve revision", { landoCommitId, error });
+      console.warn("[MozHelper][Lando] Failed to resolve revision", {
+        landoCommitId,
+        landoInstance: normalizedLandoInstance,
+        error
+      });
       return null;
     }
   })()
     .then((revision) => {
-      landoRevisionPending.delete(landoCommitId);
+      landoRevisionPending.delete(cacheKey);
       if (revision) {
-        landoRevisionCache.set(landoCommitId, revision);
+        landoRevisionCache.set(cacheKey, revision);
       }
       return revision;
     })
     .catch((error) => {
-      landoRevisionPending.delete(landoCommitId);
+      landoRevisionPending.delete(cacheKey);
       throw error;
     });
-  landoRevisionPending.set(landoCommitId, promise);
+  landoRevisionPending.set(cacheKey, promise);
   return promise;
 }
 
