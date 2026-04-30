@@ -15,6 +15,11 @@ import {
   parseMarkdownTable
 } from "../src/treeherder/performanceTable.js";
 import { assessTryJobs } from "../src/treeherder/tryStatus.js";
+import {
+  buildLandoLandingJobUrl,
+  buildLandoRevisionCacheKey,
+  getLandoApiBaseUrl
+} from "../src/treeherder/lando.js";
 
 describe("Treeherder Firebase helper", () => {
   describe("findMatrixArtifact", () => {
@@ -221,6 +226,25 @@ describe("Treeherder try status helper", () => {
     expect(result.summary.dedupedJobs).to.equal(1);
     expect(result.summary.ignoredRetries).to.equal(1);
     expect(result.summary.ignoredJobs).to.equal(1);
+  });
+});
+
+describe("Treeherder Lando helper", () => {
+  it("uses the legacy Lando API when no instance is supplied", () => {
+    expect(getLandoApiBaseUrl(null)).to.equal("https://api.lando.services.mozilla.com");
+    expect(buildLandoLandingJobUrl("41159", null)).to.equal(
+      "https://api.lando.services.mozilla.com/landing_jobs/41159?lando_revision_id=41159&count=1"
+    );
+  });
+
+  it("uses lando.moz.tools for lando-prod-2025 links", () => {
+    expect(getLandoApiBaseUrl("lando-prod-2025")).to.equal("https://lando.moz.tools");
+    expect(buildLandoLandingJobUrl("41159", "lando-prod-2025")).to.equal(
+      "https://lando.moz.tools/landing_jobs/41159/?lando_revision_id=41159&count=1"
+    );
+    expect(buildLandoRevisionCacheKey("41159", "lando-prod-2025")).to.equal(
+      "https://lando.moz.tools:41159"
+    );
   });
 });
 

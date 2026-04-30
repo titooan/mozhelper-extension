@@ -42,7 +42,8 @@
     "https://*.mozilla.org/*",
     "https://*.allizom.org/*",
     "https://treeherder.mozilla.org/*",
-    "https://api.lando.services.mozilla.com/*"
+    "https://api.lando.services.mozilla.com/*",
+    "https://lando.moz.tools/*"
   ],
   "content_scripts": [
     {

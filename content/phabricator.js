@@ -1261,14 +1261,14 @@ function phabProcessCommentTryLinks() {
       phabRemoveCommentTryIcon(anchor);
       return;
     }
-    const { repo, revision, landoCommitId } = phabParseTryLinkParams(parsedUrl);
+    const { repo, revision, landoCommitId, landoInstance } = phabParseTryLinkParams(parsedUrl);
     if (!repo || (!revision && !landoCommitId)) {
       phabRemoveCommentTryIcon(anchor);
       return;
     }
-    const key = `${repo}:${revision || `lando:${landoCommitId}`}`;
+    const key = `${repo}:${revision || `lando:${landoInstance || "default"}:${landoCommitId}`}`;
     anchor.dataset.phabTryCommentKey = key;
-    phabGetTryResult(repo, revision, landoCommitId)
+    phabGetTryResult(repo, revision, landoCommitId, landoInstance)
       .then((statusInfo) => {
         if (!phabTryCommentIconsEnabled) return;
         if (!anchor.isConnected || anchor.dataset.phabTryCommentKey !== key) {
@@ -1413,16 +1413,18 @@ function phabRenderTryLinkEntry(list, data) {
 }
 
 function phabParseTryLinkParams(url) {
-  if (!url) return { repo: null, revision: null, landoCommitId: null };
+  if (!url) return { repo: null, revision: null, landoCommitId: null, landoInstance: null };
   let repo = url.searchParams.get("repo");
   let revision = url.searchParams.get("revision");
   let landoCommitId = url.searchParams.get("landoCommitID") || url.searchParams.get("lando_commit_id");
-  if ((!repo || !revision || !landoCommitId) && url.hash && url.hash.includes("?")) {
+  let landoInstance = url.searchParams.get("landoInstance") || url.searchParams.get("lando_instance");
+  if ((!repo || !revision || !landoCommitId || !landoInstance) && url.hash && url.hash.includes("?")) {
     const hashQuery = url.hash.slice(url.hash.indexOf("?") + 1);
     const hashParams = new URLSearchParams(hashQuery);
     if (!repo) repo = hashParams.get("repo");
     if (!revision) revision = hashParams.get("revision");
     if (!landoCommitId) landoCommitId = hashParams.get("landoCommitID") || hashParams.get("lando_commit_id");
+    if (!landoInstance) landoInstance = hashParams.get("landoInstance") || hashParams.get("lando_instance");
   }
   if (!landoCommitId) {
     const fragMatch = /landoCommitID=(\d+)/i.exec(url.href);
@@ -1430,10 +1432,17 @@ function phabParseTryLinkParams(url) {
       landoCommitId = fragMatch[1];
     }
   }
+  if (!landoInstance) {
+    const instanceMatch = /(?:[?&#]|^)landoInstance=([^&#]+)/i.exec(url.href);
+    if (instanceMatch) {
+      landoInstance = decodeURIComponent(instanceMatch[1].replace(/\+/g, " "));
+    }
+  }
   return {
     repo: repo || null,
     revision: revision || null,
-    landoCommitId: landoCommitId || null
+    landoCommitId: landoCommitId || null,
+    landoInstance: landoInstance || null
   };
 }
 
@@ -1467,16 +1476,17 @@ function phabFindSummaryTryLinkData() {
         return null;
       }
     })();
-    const { repo, revision, landoCommitId } = parsedUrl
+    const { repo, revision, landoCommitId, landoInstance } = parsedUrl
       ? phabParseTryLinkParams(parsedUrl)
-      : { repo: null, revision: null, landoCommitId: null };
+      : { repo: null, revision: null, landoCommitId: null, landoInstance: null };
     return {
       url: tryLink.href,
       commentUrl: null,
       commentId: null,
       repo,
       revision,
-      landoCommitId
+      landoCommitId,
+      landoInstance
     };
   }
   return null;
@@ -1501,9 +1511,9 @@ function phabFindLatestTryLinkData() {
         return null;
       }
     })();
-    const { repo, revision, landoCommitId } = parsedUrl
+    const { repo, revision, landoCommitId, landoInstance } = parsedUrl
       ? phabParseTryLinkParams(parsedUrl)
-      : { repo: null, revision: null, landoCommitId: null };
+      : { repo: null, revision: null, landoCommitId: null, landoInstance: null };
     const anchor = eventNode.querySelector(".phabricator-anchor-view[id], .phabricator-anchor-view[name]");
     const anchorId = anchor?.id || anchor?.getAttribute("name");
     latest = {
@@ -1512,7 +1522,8 @@ function phabFindLatestTryLinkData() {
       commentId: anchorId || null,
       repo,
       revision,
-      landoCommitId
+      landoCommitId,
+      landoInstance
     };
   });
 
@@ -1542,11 +1553,11 @@ if (typeof globalThis !== "undefined" && typeof globalThis.__mozHelperExposePhab
   });
 }
 
-function phabGetTryResult(repo, revision, landoCommitId) {
+function phabGetTryResult(repo, revision, landoCommitId, landoInstance) {
   if (!repo || (!revision && !landoCommitId) || !phabRuntime?.runtime?.sendMessage) {
     return Promise.resolve(null);
   }
-  const cacheKey = `${repo}:${revision || `lando:${landoCommitId}`}`;
+  const cacheKey = `${repo}:${revision || `lando:${landoInstance || "default"}:${landoCommitId}`}`;
   if (PHAB_TRY_STATUS_CACHE.has(cacheKey)) {
     return PHAB_TRY_STATUS_CACHE.get(cacheKey);
   }
@@ -1554,21 +1565,29 @@ function phabGetTryResult(repo, revision, landoCommitId) {
   if (PHAB_TRY_STATUS_CACHE.has(key)) {
     return PHAB_TRY_STATUS_CACHE.get(key);
   }
-  console.debug("[MozHelper][Phabricator] Requesting try status", { repo, revision, landoCommitId });
+  console.debug("[MozHelper][Phabricator] Requesting try status", { repo, revision, landoCommitId, landoInstance });
   const promise = phabRuntime.runtime
     .sendMessage({
       type: "moz-helper:getTryStatus",
       repo,
       revision,
-      landoCommitId
+      landoCommitId,
+      landoInstance
     })
     .then((response) => {
       const status = response?.status ?? null;
-      console.debug("[MozHelper][Phabricator] Try status response", { repo, revision, landoCommitId, response });
+      console.debug("[MozHelper][Phabricator] Try status response", {
+        repo,
+        revision,
+        landoCommitId,
+        landoInstance,
+        response
+      });
       if (!status) {
         console.debug("[MozHelper][Phabricator] Try status unresolved", {
           repo,
           revision,
+          landoInstance,
           reason: response?.reason ?? "unknown",
           details: response?.details ?? null,
           summary: response?.summary ?? null
@@ -1613,15 +1632,17 @@ function phabUpdateLatestTryLink() {
     console.debug("[MozHelper][Phabricator] Fetching try status for latest link", {
       repo: data.repo,
       revision: data.revision,
-      landoCommitId: data.landoCommitId ?? null
+      landoCommitId: data.landoCommitId ?? null,
+      landoInstance: data.landoInstance ?? null
     });
-    phabGetTryResult(data.repo, data.revision, data.landoCommitId)
+    phabGetTryResult(data.repo, data.revision, data.landoCommitId, data.landoInstance)
       .then((statusInfo) => {
         if (!phabTryLinkEnabled) return;
         console.debug("[MozHelper][Phabricator] Try status resolved", {
           repo: data.repo,
           revision: data.revision,
           landoCommitId: data.landoCommitId ?? null,
+          landoInstance: data.landoInstance ?? null,
           status: statusInfo?.status ?? null,
           reason: statusInfo?.reason ?? null,
           summary: statusInfo?.summary ?? null
