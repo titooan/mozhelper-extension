@@ -22,6 +22,7 @@ Moz Helper Suite is a Firefox add-on that bundles several small productivity fea
 - **Phabricator file-not-attached notifier** – shows a sticky top-right alert when a comment includes a “File Not Attached” item, with quick View/Attach actions.
 - **Phabricator unsubmitted-comments indicator** – keeps draft review comments highly visible so you don’t forget to submit feedback before leaving the revision.
 - **Treeherder Firebase TestLab helper** – adds a Firebase button to the Treeherder job summary and navigation bar that fetches the latest TestLab link via Taskcluster.
+- **Treeherder Firebase TestLab cost summary** – shows the selected job's `CostReport.txt` summary in the Treeherder job detail pane when available.
 - **Treeherder unit test shortcut** – detects Taskcluster jobs that expose unit-test HTML reports and adds a toolbar icon that jumps directly to the rendered results.
 - **Treeherder macrobenchmark Performance table** – for `run-macrobenchmark-firebase-fenix` jobs, reads `live_backing.log`, extracts benchmark markdown table output, and renders it in a collapsed-by-default expandable section at the top of the Performance tab, with a copy button that copies the raw markdown table to clipboard.
 - **Shared settings/popup surfaces** – a toolbar popup and options page let you enable or disable each helper individually, with sync storage keeping preferences aligned across browsers.

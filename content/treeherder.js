@@ -21,6 +21,8 @@ let treeherderLastTaskId = null;
 let treeherderLastRunId = null;
 let treeherderLastFirebaseLink = null;
 let treeherderLastUnitTestsLink = null;
+let treeherderLastCostReportKey = null;
+let treeherderLastCostReportSummary = null;
 let treeherderLastMacrobenchmarkKey = null;
 let treeherderLastMacrobenchmarkTable = null;
 let treeherderLastMacrobenchmarkSkipKey = null;
@@ -39,6 +41,32 @@ function treeherderLog(...args) {
 function treeherderFindMatrixArtifact(artifacts) {
   if (!Array.isArray(artifacts)) return null;
   return artifacts.find((artifact) => typeof artifact?.name === "string" && artifact.name.endsWith("/matrix_ids.json")) || null;
+}
+
+// keep logic duplicated here for runtime (tests live in src/treeherder/costReport.js)
+function treeherderFindCostReportArtifact(artifacts) {
+  if (!Array.isArray(artifacts)) return null;
+  return (
+    artifacts.find(
+      (artifact) =>
+        typeof artifact?.name === "string" &&
+        (artifact.name === "results/CostReport.txt" || artifact.name.endsWith("/results/CostReport.txt"))
+    ) || null
+  );
+}
+
+// keep logic duplicated here for runtime (tests live in src/treeherder/costReport.js)
+function treeherderParseFirebaseCostReport(text) {
+  if (typeof text !== "string") return null;
+  const lines = text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  if (lines.length < 2) return null;
+  const label = lines[lines.length - 2].replace(/:\s*$/, "");
+  const value = lines[lines.length - 1];
+  if (!label || !value) return null;
+  return `${label}: ${value}`;
 }
 
 function treeherderExtractWebLink(matrixJson) {
@@ -297,6 +325,7 @@ async function treeherderTryInjectForCurrentJob() {
 
   if (taskChanged) {
     treeherderRemoveSummaryLink();
+    treeherderRemoveCostReport();
     treeherderRemoveNavbarIcon();
     treeherderRemoveUnitTestsIcon();
     treeherderRemoveMacrobenchmarkPerformanceTable();
@@ -324,10 +353,23 @@ async function treeherderTryInjectForCurrentJob() {
       treeherderLastFirebaseLink = null;
       treeherderLog("Firebase TestLab link unavailable for job", taskId);
     }
+
+    const costReportSummary = await treeherderFetchCostReportSummary(taskId, runId, artifacts);
+    if (treeherderActiveRequestId !== requestId) return;
+    if (costReportSummary) {
+      treeherderInjectCostReport(summary, costReportSummary);
+      treeherderLog("Injected Firebase TestLab cost report", costReportSummary);
+    } else {
+      treeherderRemoveCostReport();
+      treeherderLog("Firebase TestLab cost report unavailable for job", taskId);
+    }
   } else {
     treeherderRemoveSummaryLink();
+    treeherderRemoveCostReport();
     treeherderRemoveNavbarIcon();
     treeherderLastFirebaseLink = null;
+    treeherderLastCostReportKey = null;
+    treeherderLastCostReportSummary = null;
   }
 
   if (treeherderUnitTestsEnabled) {
@@ -424,6 +466,44 @@ async function treeherderFetchFirebaseLink(taskId, runId, artifacts) {
     return treeherderExtractWebLink(matrixJson);
   } catch (error) {
     console.warn("[MozHelper][Treeherder] Failed to fetch Firebase TestLab link", error);
+    return null;
+  }
+}
+
+async function treeherderFetchCostReportSummary(taskId, runId, artifacts) {
+  try {
+    if (!Array.isArray(artifacts)) return null;
+    const artifact = treeherderFindCostReportArtifact(artifacts);
+    if (!artifact) {
+      treeherderLastCostReportKey = null;
+      treeherderLastCostReportSummary = null;
+      treeherderLog("No CostReport.txt artifact found for job", taskId);
+      return null;
+    }
+    const cacheKey = `${taskId}:${runId}:${artifact.name}`;
+    if (treeherderLastCostReportKey === cacheKey) {
+      return treeherderLastCostReportSummary;
+    }
+    treeherderLog("Fetching Firebase TestLab cost report", {
+      taskId,
+      runId,
+      artifact: artifact.name
+    });
+    const reportUrl = `${TREEHERDER_TC_BASE}/api/queue/v1/task/${taskId}/runs/${runId}/artifacts/${artifact.name}`;
+    const res = await fetch(reportUrl);
+    if (!res.ok) {
+      treeherderLog("Failed to fetch CostReport.txt", res.status, res.statusText);
+      treeherderLastCostReportKey = cacheKey;
+      treeherderLastCostReportSummary = null;
+      return null;
+    }
+    const text = await res.text();
+    const summary = treeherderParseFirebaseCostReport(text);
+    treeherderLastCostReportKey = cacheKey;
+    treeherderLastCostReportSummary = summary;
+    return summary;
+  } catch (error) {
+    console.warn("[MozHelper][Treeherder] Failed to fetch Firebase TestLab cost report", error);
     return null;
   }
 }
@@ -820,6 +900,38 @@ function treeherderRemoveSummaryLink() {
   if (el) el.remove();
 }
 
+function treeherderInjectCostReport(summary, reportText) {
+  if (!summary || !reportText) return;
+  const list = summary.querySelector("#job-info") || summary;
+  let container = list.querySelector(".firebase-testlab-cost-report");
+  if (!container) {
+    container = document.createElement(list.tagName === "UL" || list.tagName === "OL" ? "li" : "div");
+    container.className = "firebase-testlab-cost-report";
+    const artifactStatusItem = Array.from(list.querySelectorAll(":scope > li")).find((item) => {
+      const strong = item.querySelector(":scope > strong");
+      return /^Artifact parsing status:\s*$/i.test((strong?.textContent || "").trim());
+    });
+    if (artifactStatusItem?.nextSibling) {
+      list.insertBefore(container, artifactStatusItem.nextSibling);
+    } else {
+      list.appendChild(container);
+    }
+  }
+  container.textContent = "";
+
+  const label = document.createElement("strong");
+  label.textContent = "Firebase TestLab cost: ";
+  container.appendChild(label);
+  const value = document.createElement("span");
+  value.textContent = reportText;
+  container.appendChild(value);
+}
+
+function treeherderRemoveCostReport() {
+  const el = document.querySelector(".firebase-testlab-cost-report");
+  if (el) el.remove();
+}
+
 function treeherderInsertBeforeDropdown(nav, li) {
   if (!nav) return;
   const dropdownLi =
@@ -915,10 +1027,13 @@ function treeherderRemoveUnitTestsIcon() {
 
 function treeherderResetUI() {
   treeherderRemoveSummaryLink();
+  treeherderRemoveCostReport();
   treeherderRemoveNavbarIcon();
   treeherderLastTaskId = null;
   treeherderLastFirebaseLink = null;
   treeherderLastUnitTestsLink = null;
+  treeherderLastCostReportKey = null;
+  treeherderLastCostReportSummary = null;
   treeherderLastMacrobenchmarkKey = null;
   treeherderLastMacrobenchmarkTable = null;
   treeherderLastMacrobenchmarkSkipKey = null;
@@ -961,6 +1076,13 @@ function treeherderInit() {
       treeherderDisconnectObserver();
       treeherderResetUI();
     }
+  });
+}
+
+if (typeof globalThis !== "undefined" && typeof globalThis.__mozHelperExposeTreeherderForTests === "function") {
+  globalThis.__mozHelperExposeTreeherderForTests({
+    treeherderInjectCostReport,
+    treeherderRemoveCostReport
   });
 }
 

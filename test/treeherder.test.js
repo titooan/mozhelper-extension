@@ -20,6 +20,10 @@ import {
   buildLandoRevisionCacheKey,
   getLandoApiBaseUrl
 } from "../src/treeherder/lando.js";
+import {
+  findCostReportArtifact,
+  parseFirebaseCostReport
+} from "../src/treeherder/costReport.js";
 
 describe("Treeherder Firebase helper", () => {
   describe("findMatrixArtifact", () => {
@@ -298,5 +302,38 @@ describe("Treeherder macrobenchmark performance table helper", () => {
         "| browserPageScroll                        | 610.925 | 738.986 | 17.3 |"
       ].join("\n")
     );
+  });
+});
+
+describe("Treeherder Firebase cost report helper", () => {
+  it("finds the CostReport artifact", () => {
+    const artifacts = [
+      { name: "public/results/logcat.txt" },
+      { name: "public/results/CostReport.txt" }
+    ];
+    expect(findCostReportArtifact(artifacts)).to.equal(artifacts[1]);
+    expect(findCostReportArtifact([{ name: "public/results/OtherReport.txt" }])).to.be.null;
+  });
+
+  it("formats the last two non-empty CostReport lines", () => {
+    const report = [
+      "Firebase TestLab costs",
+      "",
+      "Physical devices",
+      "$2.33 for 28m",
+      ""
+    ].join("\n");
+    expect(parseFirebaseCostReport(report)).to.equal("Physical devices: $2.33 for 28m");
+  });
+
+  it("does not duplicate a CostReport label colon", () => {
+    expect(parseFirebaseCostReport("Header\nPhysical devices:\n$2.33 for 28m")).to.equal(
+      "Physical devices: $2.33 for 28m"
+    );
+  });
+
+  it("returns null when the CostReport is missing useful lines", () => {
+    expect(parseFirebaseCostReport("Only one line")).to.be.null;
+    expect(parseFirebaseCostReport(null)).to.be.null;
   });
 });
