@@ -8,7 +8,7 @@ Moz Helper Suite is a Firefox extension (Manifest V3) that bundles small workflo
 - Bugzilla markdown paste helper
 - Phabricator helpers (inline video player, markdown paste, try-link surfacing/status, file-not-attached notice, unsubmitted-comment indicator with floating fallback action)
 - GitHub PR try-link status icons
-- Treeherder helpers (Firebase TestLab shortcut + unit-test report shortcut + macrobenchmark Performance table rendering)
+- Treeherder helpers (Firebase TestLab shortcut/cost summary + unit-test report shortcut + macrobenchmark Performance table rendering)
 - Shared popup/options settings backed by sync storage
 
 Non-goals:
