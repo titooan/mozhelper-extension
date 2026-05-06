@@ -9,6 +9,7 @@ document.addEventListener("DOMContentLoaded", () => {
     enablePhabricatorUnsubmittedIndicator: document.getElementById("enablePhabricatorUnsubmittedIndicator"),
     enablePhabricatorFileNotAttachedNotice: document.getElementById("enablePhabricatorFileNotAttachedNotice"),
     enableBugzilla: document.getElementById("enableBugzilla"),
+    enableGithubTryStatusIcons: document.getElementById("enableGithubTryStatusIcons"),
     enableTreeherder: document.getElementById("enableTreeherder"),
     enableTreeherderUnitTests: document.getElementById("enableTreeherderUnitTests"),
     enableTreeherderMacrobenchmarkTable: document.getElementById("enableTreeherderMacrobenchmarkTable")

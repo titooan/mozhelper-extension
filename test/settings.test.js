@@ -37,6 +37,10 @@ describe("MozHelperSettings dependent toggles", () => {
     expect(MozHelperSettings.defaultSettings).to.have.property("enableTreeherderMacrobenchmarkTable", true);
   });
 
+  it("includes GitHub try status icon default", () => {
+    expect(MozHelperSettings.defaultSettings).to.have.property("enableGithubTryStatusIcons", true);
+  });
+
   it("disables child checkbox and label when parent unchecked", () => {
     const dom = new JSDOM(`
       <label class="parent">

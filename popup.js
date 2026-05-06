@@ -11,6 +11,7 @@ document.addEventListener("DOMContentLoaded", () => {
     enablePhabricatorUnsubmittedIndicator: document.getElementById("popupEnablePhabricatorUnsubmittedIndicator"),
     enablePhabricatorFileNotAttachedNotice: document.getElementById("popupEnablePhabricatorFileNotAttachedNotice"),
     enableBugzilla: document.getElementById("popupEnableBugzilla"),
+    enableGithubTryStatusIcons: document.getElementById("popupEnableGithubTryStatusIcons"),
     enableTreeherder: document.getElementById("popupEnableTreeherder"),
     enableTreeherderUnitTests: document.getElementById("popupEnableTreeherderUnitTests"),
     enableTreeherderMacrobenchmarkTable: document.getElementById("popupEnableTreeherderMacrobenchmarkTable")
