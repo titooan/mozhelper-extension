@@ -92,6 +92,24 @@
     button:hover {
       background: var(--mh-accent-hover);
     }
+    .permission-prompt {
+      display: none;
+      margin-bottom: 14px;
+      padding: 10px;
+      border: 1px solid var(--mh-border);
+      border-radius: 8px;
+      background: color-mix(in srgb, var(--mh-accent) 10%, transparent);
+    }
+    .permission-prompt p {
+      margin: 0 0 8px;
+      font-size: 0.85rem;
+      line-height: 1.35;
+    }
+    .permission-prompt button {
+      margin-top: 0;
+      font-size: 0.88rem;
+      padding: 7px;
+    }
     #status {
       margin-top: 6px;
       font-size: 0.85rem;
@@ -105,6 +123,11 @@
     <img src="icons/32.png" alt="Moz Helper icon">
     <h1>Moz Helper Suite</h1>
   </header>
+
+  <section id="githubPermissionPrompt" class="permission-prompt">
+    <p>Grant GitHub access to show try status icons on this PR.</p>
+    <button id="grantGithubPermission" type="button">Enable GitHub PR badges</button>
+  </section>
 
   <section class="settings-section">
     <h2>Gmail</h2>

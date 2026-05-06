@@ -48,6 +48,7 @@ Non-goals:
 - `test/`: Mocha unit/integration-style tests for helper logic and selected content-script behavior.
 - `settings.js`: shared settings abstraction used by popup/options.
 - `popup.html`, `popup.js`: browser action popup UI.
+  - The popup requests optional GitHub host access when opened on a GitHub PR without that permission.
 - `options.html`, `options.js`: options page UI.
 - `tools/webext-diag-polyfill.cjs`: polyfill required by `web-ext lint` in this repo.
 - `build/`: generated build directory used for packaging/signing.
@@ -133,7 +134,7 @@ Add a new site injection:
 3. Add settings toggle if needed.
 4. Add helper modules/tests under `src/` and `test/`.
 
-GitHub-specific toggles include: `enableGithubTryStatusIcons`.
+GitHub-specific toggles include: `enableGithubTryStatusIcons`; GitHub host access is optional and requested from the popup on GitHub PR pages.
 
 Change Treeherder try-status behavior:
 
