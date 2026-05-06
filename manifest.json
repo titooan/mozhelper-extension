@@ -41,6 +41,7 @@
   "host_permissions": [
     "https://*.mozilla.org/*",
     "https://*.allizom.org/*",
+    "https://github.com/*",
     "https://treeherder.mozilla.org/*",
     "https://api.lando.services.mozilla.com/*",
     "https://lando.moz.tools/*"
@@ -72,6 +73,11 @@
     {
       "matches": ["https://treeherder.mozilla.org/*"],
       "js": ["content/treeherder.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://github.com/*/*/pull/*"],
+      "js": ["content/github.js"],
       "run_at": "document_idle"
     }
   ],

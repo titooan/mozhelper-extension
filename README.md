@@ -17,6 +17,7 @@ Moz Helper Suite is a Firefox add-on that bundles several small productivity fea
 - **Phabricator inline video player** – detects video artifacts in comments and renders an inline `<video>` player so you can review attachments without downloading them.
 - **Phabricator try link surfacer** – retrieves the latest try push link from comments and adds it to the `Diff detail` section so reviewers can see CI status at a glance.
 - **Phabricator try link status badger** – prefixes every try link with an icon indicating its status (loading, success, or failure).
+- **GitHub PR try link status badger** – prefixes Treeherder try links in GitHub pull requests with an icon indicating loading, success, or failure status.
 - **Phabricator markdown paste helper** – highlight text in any remarkup field and paste a link to instantly wrap the selection with `[text](url)` markdown without touching the mouse again.
 - **Phabricator file-not-attached notifier** – shows a sticky top-right alert when a comment includes a “File Not Attached” item, with quick View/Attach actions.
 - **Phabricator unsubmitted-comments indicator** – keeps draft review comments highly visible so you don’t forget to submit feedback before leaving the revision.

@@ -10,6 +10,7 @@ const MozHelperSettings = (() => {
     enablePhabricatorUnsubmittedIndicator: true,
     enablePhabricatorFileNotAttachedNotice: true,
     enableBugzilla: true,
+    enableGithubTryStatusIcons: true,
     enableTreeherder: true,
     enableTreeherderUnitTests: true,
     enableTreeherderMacrobenchmarkTable: true
