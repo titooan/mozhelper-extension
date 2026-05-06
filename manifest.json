@@ -36,15 +36,18 @@
     "open_in_tab": true
   },
   "permissions": [
+    "activeTab",
     "storage"
   ],
   "host_permissions": [
     "https://*.mozilla.org/*",
     "https://*.allizom.org/*",
-    "https://github.com/*",
     "https://treeherder.mozilla.org/*",
     "https://api.lando.services.mozilla.com/*",
     "https://lando.moz.tools/*"
+  ],
+  "optional_host_permissions": [
+    "https://github.com/*"
   ],
   "content_scripts": [
     {
