@@ -1268,6 +1268,7 @@ function phabProcessCommentTryLinks() {
     }
     const key = `${repo}:${revision || `lando:${landoInstance || "default"}:${landoCommitId}`}`;
     anchor.dataset.phabTryCommentKey = key;
+    phabApplyCommentTryStatus(anchor, { status: null, reason: "pending" });
     phabGetTryResult(repo, revision, landoCommitId, landoInstance)
       .then((statusInfo) => {
         if (!phabTryCommentIconsEnabled) return;
@@ -1538,9 +1539,20 @@ if (typeof globalThis !== "undefined" && typeof globalThis.__mozHelperExposePhab
     phabHandlePaste,
     phabHasUnattachedFiles,
     phabFindUnattachedFileLink,
+    phabProcessCommentTryLinks,
+    phabApplyCommentTryStatus,
     phabUpdateFileNotAttachedNotice,
     phabUpdateUnsubmittedIndicator,
     phabProcessPage,
+    phabSetTryLinkEnabled(value) {
+      phabTryLinkEnabled = Boolean(value);
+    },
+    phabSetTryCommentIconsEnabled(value) {
+      phabTryCommentIconsEnabled = Boolean(value);
+    },
+    phabClearTryStatusCache() {
+      PHAB_TRY_STATUS_CACHE.clear();
+    },
     phabSetUnsubmittedIndicatorEnabled(value) {
       phabUnsubmittedIndicatorEnabled = Boolean(value);
     },
@@ -1584,6 +1596,7 @@ function phabGetTryResult(repo, revision, landoCommitId, landoInstance) {
         response
       });
       if (!status) {
+        PHAB_TRY_STATUS_CACHE.delete(key);
         console.debug("[MozHelper][Phabricator] Try status unresolved", {
           repo,
           revision,
@@ -1596,6 +1609,7 @@ function phabGetTryResult(repo, revision, landoCommitId, landoInstance) {
       return response ?? null;
     })
     .catch((error) => {
+      PHAB_TRY_STATUS_CACHE.delete(key);
       console.warn("[MozHelper][Phabricator] Try status lookup failed", error);
       return null;
     });
@@ -1628,7 +1642,7 @@ function phabUpdateLatestTryLink() {
   phabRenderTryLinkEntry(list, data);
 
   if (data.repo && (data.revision || data.landoCommitId)) {
-    phabApplyTryStatusIcon(list, null);
+    phabApplyTryStatusIcon(list, { status: null, reason: "pending" });
     console.debug("[MozHelper][Phabricator] Fetching try status for latest link", {
       repo: data.repo,
       revision: data.revision,
