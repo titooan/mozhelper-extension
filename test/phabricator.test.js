@@ -112,6 +112,7 @@ describe("Phabricator try link extraction", () => {
   const realConsoleDebug = console.debug;
   const originalNavigatorDescriptor = Object.getOwnPropertyDescriptor(global, "navigator");
   let documentPasteListenerCalls = [];
+  let sentMessages = [];
   const testExtensionBaseUrl = "moz-extension://test-extension-id/";
 
   function setGlobalNavigator(value) {
@@ -147,6 +148,11 @@ describe("Phabricator try link extraction", () => {
     return dom;
   }
 
+  async function flushPromises() {
+    await Promise.resolve();
+    await Promise.resolve();
+  }
+
   before(async () => {
     console.debug = () => {};
     global.setTimeout = (fn) => {
@@ -173,7 +179,10 @@ describe("Phabricator try link extraction", () => {
     const runtimeStub = {
       runtime: {
         getURL: (path) => `${testExtensionBaseUrl}${path}`,
-        sendMessage: () => Promise.resolve(null)
+        sendMessage: (message) => {
+          sentMessages.push(message);
+          return Promise.resolve(null);
+        }
       },
       storage: storageStub
     };
@@ -189,6 +198,20 @@ describe("Phabricator try link extraction", () => {
 
   beforeEach(() => {
     installDom();
+    sentMessages = [];
+    global.browser.runtime.sendMessage = (message) => {
+      sentMessages.push(message);
+      return Promise.resolve(null);
+    };
+    if (phabTestApi?.phabSetTryLinkEnabled) {
+      phabTestApi.phabSetTryLinkEnabled(true);
+    }
+    if (phabTestApi?.phabSetTryCommentIconsEnabled) {
+      phabTestApi.phabSetTryCommentIconsEnabled(true);
+    }
+    if (phabTestApi?.phabClearTryStatusCache) {
+      phabTestApi.phabClearTryStatusCache();
+    }
     if (phabTestApi?.phabResetFileNotAttachedDismissed) {
       phabTestApi.phabResetFileNotAttachedDismissed();
     }
@@ -301,6 +324,74 @@ describe("Phabricator try link extraction", () => {
     expect(result.revision).to.equal(null);
     expect(result.landoCommitId).to.equal("41159");
     expect(result.landoInstance).to.equal("lando-prod-2025");
+  });
+
+  it("adds a loading prefix and requests status for lando-only comment try links", async () => {
+    const tryLink =
+      "https://treeherder.mozilla.org/jobs?repo=try&landoInstance=lando-prod-2025&landoCommitID=47115";
+    global.browser.runtime.sendMessage = (message) => {
+      sentMessages.push(message);
+      return Promise.resolve({ status: null, reason: "pending", failedJobs: [], pendingJobs: [] });
+    };
+    document.body.innerHTML = `
+      <div class="phui-timeline-shell">
+        <div class="phui-timeline-title">
+          <a class="phui-link-person" href="/p/alice/">Alice</a>
+        </div>
+        <div class="transaction-comment">
+          <a href="${tryLink}">try</a>
+        </div>
+      </div>
+    `;
+
+    phabTestApi.phabProcessCommentTryLinks();
+
+    const anchor = document.querySelector(".transaction-comment a[href]");
+    let icon = anchor.previousElementSibling;
+    expect(icon?.dataset.phabTryCommentIcon).to.equal("true");
+    expect(icon.className).to.include("fa-chevron-circle-right");
+    expect(sentMessages).to.have.lengthOf(1);
+    expect(sentMessages[0]).to.deep.include({
+      type: "moz-helper:getTryStatus",
+      repo: "try",
+      revision: null,
+      landoCommitId: "47115",
+      landoInstance: "lando-prod-2025"
+    });
+
+    await flushPromises();
+
+    icon = anchor.previousElementSibling;
+    expect(icon?.dataset.phabTryTooltip).to.equal("Loading");
+  });
+
+  it("does not keep unresolved try status responses in the Phabricator cache", async () => {
+    const tryLink = "https://treeherder.mozilla.org/jobs?repo=try&landoCommitID=47115";
+    const responses = [
+      { status: null, reason: "missing-push" },
+      { status: "success", reason: null, failedJobs: [], pendingJobs: [] }
+    ];
+    global.browser.runtime.sendMessage = (message) => {
+      sentMessages.push(message);
+      return Promise.resolve(responses.shift());
+    };
+    document.body.innerHTML = `
+      <div class="transaction-comment">
+        <a href="${tryLink}">try</a>
+      </div>
+    `;
+
+    phabTestApi.phabProcessCommentTryLinks();
+    await flushPromises();
+    expect(document.querySelector("[data-phab-try-comment-icon]")).to.not.exist;
+
+    phabTestApi.phabProcessCommentTryLinks();
+    await flushPromises();
+
+    const icon = document.querySelector("[data-phab-try-comment-icon]");
+    expect(icon).to.exist;
+    expect(icon.className).to.include("fa-check-circle");
+    expect(sentMessages).to.have.lengthOf(2);
   });
 
   it("extracts try links that only appear in timeline summary content", () => {
