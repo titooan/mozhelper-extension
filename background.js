@@ -17,6 +17,13 @@ const TRY_IGNORED_STATES = new Set(["retry"]);
 const TRY_UNSCHEDULED_STATES = new Set(["unscheduled"]);
 const TRY_BLOCKING_TIERS = new Set([1]);
 const MAX_PENDING_DEBUG = 15;
+const TREEHERDER_TC_BASE = "https://firefox-ci-tc.services.mozilla.com";
+const APK_ARTIFACT_NAME = "public/build/target.arm64-v8a.apk";
+const APK_JOB_NAMES = ["signing-apk-fenix-debug", "signing-apk-focus-debug"];
+const APK_JOB_LABELS = {
+  "signing-apk-fenix-debug": "fenix-debug.apk",
+  "signing-apk-focus-debug": "focus-debug.apk"
+};
 
 function parseJobTimestamp(value) {
   if (value == null) {
@@ -162,6 +169,82 @@ function isLaterJobEntry(current, previous) {
   return false;
 }
 
+function selectLatestApkJobEntries(jobs) {
+  if (!Array.isArray(jobs)) {
+    return [];
+  }
+  const latestByJobName = new Map();
+  jobs.forEach((job, index) => {
+    const jobName = typeof job?.job_type_name === "string" ? job.job_type_name.trim() : "";
+    if (!APK_JOB_NAMES.includes(jobName)) return;
+    const taskId = typeof job?.task_id === "string" ? job.task_id.trim() : "";
+    if (!taskId) return;
+    const candidate = {
+      jobName,
+      label: APK_JOB_LABELS[jobName],
+      taskId,
+      order: computeJobOrder(job, index),
+      index
+    };
+    const existing = latestByJobName.get(jobName);
+    if (isLaterJobEntry(candidate, existing)) {
+      latestByJobName.set(jobName, candidate);
+    }
+  });
+  return APK_JOB_NAMES.map((jobName) => latestByJobName.get(jobName))
+    .filter(Boolean)
+    .map(({ jobName, label, taskId }) => ({ jobName, label, taskId }));
+}
+
+function buildTaskclusterArtifactUrl(taskId, artifactName = APK_ARTIFACT_NAME, runId = 0) {
+  if (typeof taskId !== "string" || !taskId.trim()) return null;
+  if (typeof artifactName !== "string" || !artifactName.trim()) return null;
+  if (typeof runId !== "number" || runId < 0) return null;
+  return `${TREEHERDER_TC_BASE}/api/queue/v1/task/${taskId}/runs/${runId}/artifacts/${artifactName}`;
+}
+
+function buildTaskclusterArtifactsListUrl(taskId) {
+  if (typeof taskId !== "string" || !taskId.trim()) return null;
+  return `${TREEHERDER_TC_BASE}/api/queue/v1/task/${taskId}/runs/0/artifacts`;
+}
+
+function normalizeApkDownloadFilename(filename) {
+  const value = String(filename || "").trim();
+  return value || null;
+}
+
+async function fetchApkLinksForTryJobs(jobs) {
+  const candidates = selectLatestApkJobEntries(jobs);
+  if (!candidates.length) {
+    return [];
+  }
+  const results = await Promise.all(
+    candidates.map(async ({ label, taskId }) => {
+      try {
+        const artifactsJson = await fetchTreeherderJson(
+          buildTaskclusterArtifactsListUrl(taskId),
+          "artifact list"
+        );
+        const artifacts = Array.isArray(artifactsJson?.artifacts) ? artifactsJson.artifacts : [];
+        const hasTargetApk = artifacts.some(
+          (artifact) => typeof artifact?.name === "string" && artifact.name.endsWith(APK_ARTIFACT_NAME)
+        );
+        if (!hasTargetApk) {
+          return null;
+        }
+        return {
+          label,
+          url: buildTaskclusterArtifactUrl(taskId, APK_ARTIFACT_NAME, 0)
+        };
+      } catch (error) {
+        console.warn("[MozHelper][Treeherder] APK link lookup failed", { label, taskId, error });
+        return null;
+      }
+    })
+  );
+  return results.filter(Boolean);
+}
+
 async function fetchBug(bugId) {
   if (bugCache.has(bugId)) {
     return bugCache.get(bugId);
@@ -209,6 +292,35 @@ runtime.runtime.onMessage.addListener((message, sender, sendResponse) => {
       .catch((error) => {
         console.error("Bugzilla fetch failed:", error);
         sendResponse({ bug: null });
+    });
+    return true;
+  }
+  if (message.type === "moz-helper:downloadApk") {
+    const url = typeof message.url === "string" ? message.url.trim() : "";
+    const filename = normalizeApkDownloadFilename(message.filename);
+    if (!url || !filename || !runtime.downloads?.download) {
+      sendResponse({ ok: false, reason: "missing-params" });
+      return;
+    }
+    runtime.downloads
+      .download({
+        url,
+        filename,
+        conflictAction: "uniquify",
+        saveAs: false
+      })
+      .then((downloadId) => sendResponse({ ok: true, downloadId }))
+      .catch((error) => {
+        console.warn("[MozHelper][Treeherder] APK download failed", {
+          url,
+          filename,
+          error: serializeError(error)
+        });
+        sendResponse({
+          ok: false,
+          reason: "exception",
+          details: serializeError(error)
+        });
       });
     return true;
   }
@@ -363,13 +475,25 @@ async function fetchTryStatus(repo, revision, landoCommitId = null, landoInstanc
       }
       const jobs = Array.isArray(jobsJson.results) ? jobsJson.results : [];
       const result = assessTryJobs(jobs);
+      let apkLinks = [];
+      try {
+        apkLinks = await fetchApkLinksForTryJobs(jobs);
+      } catch (error) {
+        console.warn("[MozHelper][Treeherder] APK link enrichment failed", {
+          repo,
+          revision: resolvedRevision,
+          pushId,
+          error: serializeError(error)
+        });
+      }
       console.debug("[MozHelper][Treeherder] Computed try status", {
         repo,
         revision: resolvedRevision,
         pushId,
         status: result.status,
         reason: result.reason,
-        summary: result.summary
+        summary: result.summary,
+        apkLinks
       });
       if (!result.status) {
         console.debug("[MozHelper][Treeherder] Try status unresolved diagnostics", {
@@ -381,7 +505,7 @@ async function fetchTryStatus(repo, revision, landoCommitId = null, landoInstanc
           failedJobs: (result.failedJobs || []).slice(0, 5)
         });
       }
-      return result;
+      return { ...result, apkLinks };
     } catch (error) {
       console.warn("Treeherder try status lookup failed:", error);
       return {

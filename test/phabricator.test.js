@@ -304,6 +304,120 @@ describe("Phabricator try link extraction", () => {
     expect(result.landoInstance).to.equal("lando-prod-2025");
   });
 
+  it("renders APK links on a second line when the try status resolves", async () => {
+    const tryLink =
+      "https://treeherder.mozilla.org/jobs?repo=try&revision=abc123&landoCommitID=47115";
+    global.browser.runtime.sendMessage = (message) => {
+      sentMessages.push(message);
+      return Promise.resolve({
+        status: "success",
+        reason: null,
+        summary: { totalJobs: 2, activeJobs: 0, failedJobs: 0 },
+        failedJobs: [],
+        pendingJobs: [],
+        apkLinks: [
+          {
+            label: "fenix-debug.apk",
+            url: "https://firefox-ci-tc.services.mozilla.com/api/queue/v1/task/fenix-task/runs/0/artifacts/public/build/target.arm64-v8a.apk"
+          },
+          {
+            label: "focus-debug.apk",
+            url: "https://firefox-ci-tc.services.mozilla.com/api/queue/v1/task/focus-task/runs/0/artifacts/public/build/target.arm64-v8a.apk"
+          }
+        ]
+      });
+    };
+    document.body.innerHTML = `
+      <div class="phui-box phui-box-border phui-object-box">
+        <div class="phui-header-view">
+          <div class="phui-header-header">Diff Detail</div>
+        </div>
+        <dl class="phui-property-list-properties">
+          <dt>Owner</dt>
+          <dd>Mozilla</dd>
+        </dl>
+      </div>
+      <div class="phui-timeline-shell">
+        <div class="phui-timeline-title">
+          <a class="phui-link-person" href="/p/alice/">Alice</a>
+        </div>
+        <div class="transaction-comment">
+          <a href="${tryLink}">try</a>
+        </div>
+        <a class="phabricator-anchor-view" id="comment-apk"></a>
+      </div>
+    `;
+
+    phabTestApi.phabProcessPage();
+    await flushPromises();
+
+    const list = document.querySelector("dl.phui-property-list-properties");
+    const dd = list.querySelector('dd[data-phab-try-link="true"]');
+    expect(dd).to.exist;
+    expect(dd.querySelectorAll("br")).to.have.lengthOf(1);
+    expect(dd.querySelectorAll('[data-phab-apk-entry="true"]')).to.have.lengthOf(2);
+    expect(dd.querySelectorAll("img")).to.have.lengthOf(2);
+    const links = Array.from(dd.querySelectorAll('a[href]')).map((anchor) => anchor.textContent);
+    expect(links).to.include("fenix-debug.apk");
+    expect(links).to.include("focus-debug.apk");
+  });
+
+  it("downloads APK links with the friendly filename", async () => {
+    const tryLink =
+      "https://treeherder.mozilla.org/jobs?repo=try&revision=abc123&landoCommitID=47115";
+    let lastMessage = null;
+    global.browser.runtime.sendMessage = (message) => {
+      sentMessages.push(message);
+      lastMessage = message;
+      return Promise.resolve({
+        status: "success",
+        reason: null,
+        summary: { totalJobs: 2, activeJobs: 0, failedJobs: 0 },
+        failedJobs: [],
+        pendingJobs: [],
+        apkLinks: [
+          {
+            label: "fenix-debug.apk",
+            url: "https://firefox-ci-tc.services.mozilla.com/api/queue/v1/task/fenix-task/runs/0/artifacts/public/build/target.arm64-v8a.apk"
+          }
+        ]
+      });
+    };
+    document.body.innerHTML = `
+      <div class="phui-box phui-box-border phui-object-box">
+        <div class="phui-header-view">
+          <div class="phui-header-header">Diff Detail</div>
+        </div>
+        <dl class="phui-property-list-properties">
+          <dt>Owner</dt>
+          <dd>Mozilla</dd>
+        </dl>
+      </div>
+      <div class="phui-timeline-shell">
+        <div class="phui-timeline-title">
+          <a class="phui-link-person" href="/p/alice/">Alice</a>
+        </div>
+        <div class="transaction-comment">
+          <a href="${tryLink}">try</a>
+        </div>
+      </div>
+    `;
+
+    phabTestApi.phabProcessPage();
+    await flushPromises();
+
+    const apkLink = document.querySelector(
+      'dd[data-phab-try-link="true"] a[data-phab-apk-filename="fenix-debug.apk"]'
+    );
+    expect(apkLink).to.exist;
+    apkLink.click();
+    expect(lastMessage).to.deep.equal({
+      type: "moz-helper:downloadApk",
+      url: "https://firefox-ci-tc.services.mozilla.com/api/queue/v1/task/fenix-task/runs/0/artifacts/public/build/target.arm64-v8a.apk",
+      filename: "fenix-debug-D123.apk"
+    });
+  });
+
   it("extracts lando-only try links with their lando instance", () => {
     const tryLink =
       "https://treeherder.mozilla.org/jobs?repo=try&landoInstance=lando-prod-2025&landoCommitID=41159";
@@ -443,6 +557,47 @@ describe("Phabricator try link extraction", () => {
     expect(result.repo).to.equal("try");
     expect(result.revision).to.equal("a75c53bce615ca85114213272d49929d4aba745b");
     expect(result.landoCommitId).to.equal(null);
+  });
+
+  it("does not render APK links when the try status has none", async () => {
+    const tryLink =
+      "https://treeherder.mozilla.org/jobs?repo=try&revision=abc123&landoCommitID=47115";
+    global.browser.runtime.sendMessage = () =>
+      Promise.resolve({
+        status: "success",
+        reason: null,
+        summary: { totalJobs: 2, activeJobs: 0, failedJobs: 0 },
+        failedJobs: [],
+        pendingJobs: []
+      });
+    document.body.innerHTML = `
+      <div class="phui-box phui-box-border phui-object-box">
+        <div class="phui-header-view">
+          <div class="phui-header-header">Diff Detail</div>
+        </div>
+        <dl class="phui-property-list-properties">
+          <dt>Owner</dt>
+          <dd>Mozilla</dd>
+        </dl>
+      </div>
+      <div class="phui-timeline-shell">
+        <div class="phui-timeline-title">
+          <a class="phui-link-person" href="/p/alice/">Alice</a>
+        </div>
+        <div class="transaction-comment">
+          <a href="${tryLink}">try</a>
+        </div>
+      </div>
+    `;
+
+    phabTestApi.phabProcessPage();
+    await flushPromises();
+
+    const dd = document.querySelector('dd[data-phab-try-link="true"]');
+    expect(dd.querySelector("br")).to.not.exist;
+    expect(Array.from(dd.querySelectorAll("a")).map((anchor) => anchor.textContent)).to.deep.equal([
+      "Try link"
+    ]);
   });
 
   it("shows a file-not-attached notice with action buttons", () => {

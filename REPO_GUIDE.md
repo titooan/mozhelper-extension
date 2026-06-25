@@ -28,21 +28,25 @@ Non-goals:
 ## Project Layout
 
 - `manifest.json`: extension manifest, permissions, content script wiring.
+  - Requests `downloads` so Phabricator APK links can save with friendly filenames.
 - `background.js`: background script handling network-backed message actions:
   - Bugzilla bug fetch (`moz-helper:getBugInfo`)
   - Try status fetch/assessment (`moz-helper:getTryStatus`), including `landoCommitID` resolution through the URL's Lando instance (`lando-prod-2025` uses `https://lando.moz.tools`; legacy/default uses `https://api.lando.services.mozilla.com`)
+  - APK download handoff (`moz-helper:downloadApk`) used by the Phabricator APK links
 - `content/`: runtime content scripts injected per site:
   - `content/gmail.js`
   - `content/bugzilla.js`
   - `content/phabricator.js`
   - `content/github.js`
   - `content/treeherder.js`
+- `icons/`: shared extension assets, including the Phabricator APK prefix icons `icons/fenix-debug.svg` and `icons/focus.svg`.
 - `src/`: testable pure/helper modules that mirror runtime logic:
   - `src/gmail/*`
   - `src/bugzilla/*`
   - `src/phabricator/*`
   - `src/treeherder/*`
-    - `src/treeherder/lando.js`: testable Lando instance URL/cache-key helpers mirrored by `background.js`
+  - `src/treeherder/apkLinks.js`: shared APK-link extraction and Taskcluster artifact URL helpers for Phabricator try cards
+  - `src/treeherder/lando.js`: testable Lando instance URL/cache-key helpers mirrored by `background.js`
   - `src/taskcluster/*`
   - `src/utils/url.js`
 - `test/`: Mocha unit/integration-style tests for helper logic and selected content-script behavior.
@@ -162,6 +166,7 @@ Runtime logging hotspots:
 
 - `content/treeherder.js`: debug logs prefixed with `[MozHelper][Treeherder]`
 - `background.js`: logs fetch/status exceptions for Bugzilla/Try status
+- `src/treeherder/apkLinks.js` and the mirrored `background.js` helpers: APK link extraction for `signing-apk-fenix-debug` and `signing-apk-focus-debug`
 - `content/*`: many features are driven by `MutationObserver`; if behavior is flaky, inspect DOM timing/selectors first
 
 Frequent failure modes:

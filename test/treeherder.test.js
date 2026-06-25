@@ -8,6 +8,13 @@ import {
   TREEHERDER_TC_BASE
 } from "../src/treeherder/testlab.js";
 import {
+  APK_ARTIFACT_NAME,
+  APK_JOB_LABELS,
+  APK_JOB_NAMES,
+  buildTaskclusterArtifactUrl,
+  selectLatestApkJobEntries
+} from "../src/treeherder/apkLinks.js";
+import {
   MACROBENCHMARK_JOB_NAME,
   shouldShowMacrobenchmarkTable,
   findLiveBackingLogArtifact,
@@ -249,6 +256,33 @@ describe("Treeherder Lando helper", () => {
     expect(buildLandoRevisionCacheKey("41159", "lando-prod-2025")).to.equal(
       "https://lando.moz.tools:41159"
     );
+  });
+});
+
+describe("Treeherder APK helper", () => {
+  it("selects the latest signing APK jobs", () => {
+    const jobs = [
+      { job_type_name: "signing-apk-fenix-debug", task_id: "old-fenix", start_timestamp: 100 },
+      { job_type_name: "unrelated-job", task_id: "ignore-me", start_timestamp: 200 },
+      { job_type_name: "signing-apk-focus-debug", task_id: "focus-1", start_timestamp: 120 },
+      { job_type_name: "signing-apk-fenix-debug", task_id: "new-fenix", start_timestamp: 300 }
+    ];
+
+    const result = selectLatestApkJobEntries(jobs);
+    expect(result).to.deep.equal([
+      { jobName: APK_JOB_NAMES[0], label: APK_JOB_LABELS[APK_JOB_NAMES[0]], taskId: "new-fenix" },
+      { jobName: APK_JOB_NAMES[1], label: APK_JOB_LABELS[APK_JOB_NAMES[1]], taskId: "focus-1" }
+    ]);
+  });
+
+  it("builds taskcluster artifact URLs for APKs", () => {
+    expect(buildTaskclusterArtifactUrl("abc123", APK_ARTIFACT_NAME)).to.equal(
+      `${TREEHERDER_TC_BASE}/api/queue/v1/task/abc123/runs/0/artifacts/${APK_ARTIFACT_NAME}`
+    );
+  });
+
+  it("returns an empty list when there are no matching APK jobs", () => {
+    expect(selectLatestApkJobEntries([{ job_type_name: "other", task_id: "1" }])).to.deep.equal([]);
   });
 });
 
