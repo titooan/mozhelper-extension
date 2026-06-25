@@ -37,12 +37,14 @@
   },
   "permissions": [
     "activeTab",
+    "downloads",
     "storage"
   ],
   "host_permissions": [
     "https://*.mozilla.org/*",
     "https://*.allizom.org/*",
     "https://treeherder.mozilla.org/*",
+    "https://firefox-ci-tc.services.mozilla.com/*",
     "https://api.lando.services.mozilla.com/*",
     "https://lando.moz.tools/*"
   ],
@@ -86,7 +88,7 @@
   ],
   "web_accessible_resources": [
     {
-      "resources": ["icons/tests_icon.png", "icons/phabricator-favicon-red.png"],
+      "resources": ["icons/fenix-debug.svg", "icons/focus.svg", "icons/tests_icon.png", "icons/phabricator-favicon-red.png"],
       "matches": ["<all_urls>"]
     }
   ]

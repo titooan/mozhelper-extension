@@ -1370,7 +1370,73 @@ function phabApplyTryStatusIcon(list, statusInfo) {
   });
 }
 
-function phabRenderTryLinkEntry(list, data) {
+function phabRenderTryApkLinks(dd, apkLinks) {
+  const links = Array.isArray(apkLinks)
+    ? apkLinks.filter((link) => typeof link?.label === "string" && typeof link?.url === "string" && link.label && link.url)
+    : [];
+  if (!dd || !links.length) return;
+  links.forEach((link, index) => {
+    const entry = document.createElement("div");
+    entry.dataset.phabApkEntry = "true";
+    entry.style.display = "flex";
+    entry.style.alignItems = "center";
+    entry.style.gap = "4px";
+    entry.style.whiteSpace = "nowrap";
+    const icon = document.createElement("img");
+    icon.src = phabRuntime.runtime.getURL(phabGetApkIconPath(link.label));
+    icon.alt = "";
+    icon.width = 24;
+    icon.height = 24;
+    icon.setAttribute("aria-hidden", "true");
+    icon.style.flex = "0 0 auto";
+    icon.style.width = "24px";
+    icon.style.height = "24px";
+    const anchor = document.createElement("a");
+    anchor.href = link.url;
+    anchor.target = "_blank";
+    anchor.rel = "noreferrer";
+    anchor.download = phabBuildApkDownloadFilename(link.label);
+    anchor.dataset.phabApkFilename = link.label;
+    anchor.textContent = link.label;
+    anchor.addEventListener("click", (event) => {
+      event.preventDefault();
+      phabRuntime.runtime.sendMessage({
+        type: "moz-helper:downloadApk",
+        url: link.url,
+        filename: anchor.download || link.label
+      }).catch(() => {});
+    });
+    entry.append(icon, anchor);
+    dd.appendChild(entry);
+  });
+}
+
+function phabGetApkIconPath(label) {
+  const baseLabel = typeof label === "string" ? label.toLowerCase() : "";
+  if (baseLabel.startsWith("focus")) {
+    return "icons/focus.svg";
+  }
+  return "icons/fenix-debug.svg";
+}
+
+function phabGetDiffRevisionId() {
+  const path = window.location?.pathname || "";
+  const match = /^\/(D\d+)(?:\/|$)/i.exec(path);
+  return match ? match[1].toUpperCase() : null;
+}
+
+function phabBuildApkDownloadFilename(label) {
+  const baseLabel = typeof label === "string" ? label.trim() : "";
+  if (!baseLabel) return null;
+  const revisionId = phabGetDiffRevisionId();
+  if (!revisionId) {
+    return baseLabel;
+  }
+  const stem = baseLabel.replace(/\.apk$/i, "");
+  return `${stem}-${revisionId}.apk`;
+}
+
+function phabRenderTryLinkEntry(list, data, statusInfo = null) {
   phabClearTryLinkEntry(list);
   if (!list || !data) return;
 
@@ -1409,6 +1475,11 @@ function phabRenderTryLinkEntry(list, data) {
     }
     dd.appendChild(commentAnchor);
   }
+
+  if (statusInfo?.apkLinks?.length || data.apkLinks?.length) {
+    dd.appendChild(document.createElement("br"));
+  }
+  phabRenderTryApkLinks(dd, statusInfo?.apkLinks || data.apkLinks);
 
   list.append(dt, dd);
 }
@@ -1661,6 +1732,7 @@ function phabUpdateLatestTryLink() {
           reason: statusInfo?.reason ?? null,
           summary: statusInfo?.summary ?? null
         });
+        phabRenderTryLinkEntry(list, data, statusInfo);
         phabApplyTryStatusIcon(list, statusInfo);
       })
       .catch(() => {});
