@@ -418,6 +418,119 @@ describe("Phabricator try link extraction", () => {
     });
   });
 
+  it("renders APK chips at the bottom of a comment when the try status resolves", async () => {
+    const tryLink1 =
+      "https://treeherder.mozilla.org/jobs?repo=try&revision=abc123&landoCommitID=47115";
+    const tryLink2 =
+      "https://treeherder.mozilla.org/jobs?repo=try&revision=def456&landoCommitID=47116";
+    let lastMessage = null;
+    const responses = [
+      {
+        status: "success",
+        reason: null,
+        summary: { totalJobs: 2, activeJobs: 0, failedJobs: 0 },
+        failedJobs: [],
+        pendingJobs: [],
+        apkLinks: [
+          {
+            label: "fenix-debug.apk",
+            url: "https://firefox-ci-tc.services.mozilla.com/api/queue/v1/task/fenix-task/runs/0/artifacts/public/build/target.arm64-v8a.apk"
+          },
+          {
+            label: "focus-debug.apk",
+            url: "https://firefox-ci-tc.services.mozilla.com/api/queue/v1/task/focus-task/runs/0/artifacts/public/build/target.arm64-v8a.apk"
+          }
+        ]
+      },
+      {
+        status: "success",
+        reason: null,
+        summary: { totalJobs: 2, activeJobs: 0, failedJobs: 0 },
+        failedJobs: [],
+        pendingJobs: [],
+        apkLinks: [
+          {
+            label: "focus-debug.apk",
+            url: "https://firefox-ci-tc.services.mozilla.com/api/queue/v1/task/focus-task/runs/0/artifacts/public/build/target.arm64-v8a.apk"
+          }
+        ]
+      }
+    ];
+    global.browser.runtime.sendMessage = (message) => {
+      lastMessage = message;
+      if (message.type === "moz-helper:downloadApk") {
+        return Promise.resolve({ ok: true });
+      }
+      return Promise.resolve(responses.shift());
+    };
+    phabTestApi.phabSetTryCommentIconsEnabled(false);
+    document.body.innerHTML = `
+      <div class="phui-timeline-shell">
+        <div class="phui-timeline-title">
+          <a class="phui-link-person" href="/p/alice/">Alice</a>
+        </div>
+        <div class="transaction-comment">
+          <p>Here is the try link: <a href="${tryLink1}">try 1</a> and <a href="${tryLink2}">try 2</a></p>
+          <p>And a regular link: <a href="https://example.com">example</a></p>
+        </div>
+        <a class="phabricator-anchor-view" id="comment-apk-chips"></a>
+      </div>
+    `;
+
+    phabTestApi.phabProcessCommentTryLinks();
+    await flushPromises();
+
+    const chipRow = document.querySelector(
+      ".transaction-comment [data-phab-comment-apk-links='true']"
+    );
+    expect(chipRow).to.exist;
+    const chips = Array.from(chipRow.querySelectorAll("a.phab-try-apk-chip"));
+    expect(chips).to.have.lengthOf(2);
+    expect(chips.map((chip) => chip.textContent)).to.deep.equal(["fenix-debug.apk", "focus-debug.apk"]);
+    expect(chips[0].href).to.equal(
+      "https://firefox-ci-tc.services.mozilla.com/api/queue/v1/task/fenix-task/runs/0/artifacts/public/build/target.arm64-v8a.apk"
+    );
+    expect(chips[1].href).to.equal(
+      "https://firefox-ci-tc.services.mozilla.com/api/queue/v1/task/focus-task/runs/0/artifacts/public/build/target.arm64-v8a.apk"
+    );
+    chips[0].click();
+    expect(lastMessage).to.deep.equal({
+      type: "moz-helper:downloadApk",
+      url: "https://firefox-ci-tc.services.mozilla.com/api/queue/v1/task/fenix-task/runs/0/artifacts/public/build/target.arm64-v8a.apk",
+      filename: "fenix-debug-D123.apk"
+    });
+    expect(chipRow.querySelectorAll("img")).to.have.lengthOf(2);
+  });
+
+  it("does not render APK chips when no APK jobs are available", async () => {
+    const tryLink =
+      "https://treeherder.mozilla.org/jobs?repo=try&revision=abc123&landoCommitID=47115";
+    global.browser.runtime.sendMessage = () =>
+      Promise.resolve({
+        status: "success",
+        reason: null,
+        summary: { totalJobs: 2, activeJobs: 0, failedJobs: 0 },
+        failedJobs: [],
+        pendingJobs: [],
+        apkLinks: []
+      });
+    document.body.innerHTML = `
+      <div class="phui-timeline-shell">
+        <div class="phui-timeline-title">
+          <a class="phui-link-person" href="/p/alice/">Alice</a>
+        </div>
+        <div class="transaction-comment">
+          <a href="${tryLink}">try</a>
+        </div>
+      </div>
+    `;
+
+    phabTestApi.phabProcessCommentTryLinks();
+    await flushPromises();
+
+    expect(document.querySelector("[data-phab-comment-apk-links='true']")).to.not.exist;
+  });
+
   it("extracts lando-only try links with their lando instance", () => {
     const tryLink =
       "https://treeherder.mozilla.org/jobs?repo=try&landoInstance=lando-prod-2025&landoCommitID=41159";
