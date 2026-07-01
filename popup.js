@@ -52,6 +52,7 @@ document.addEventListener("DOMContentLoaded", () => {
     enablePhabricatorPaste: document.getElementById("popupEnablePhabricatorPaste"),
     enablePhabricatorTryLinks: document.getElementById("popupEnablePhabricatorTryLinks"),
     enablePhabricatorTryCommentIcons: document.getElementById("popupEnablePhabricatorTryCommentIcons"),
+    enablePhabricatorApkChips: document.getElementById("popupEnablePhabricatorApkChips"),
     enablePhabricatorUnsubmittedIndicator: document.getElementById("popupEnablePhabricatorUnsubmittedIndicator"),
     enablePhabricatorFileNotAttachedNotice: document.getElementById("popupEnablePhabricatorFileNotAttachedNotice"),
     enableBugzilla: document.getElementById("popupEnableBugzilla"),
