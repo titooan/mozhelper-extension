@@ -7,6 +7,7 @@ const phabDefaultSettings = {
   enablePhabricatorPaste: true,
   enablePhabricatorTryLinks: true,
   enablePhabricatorTryCommentIcons: true,
+  enablePhabricatorApkChips: true,
   enablePhabricatorUnsubmittedIndicator: true,
   enablePhabricatorFileNotAttachedNotice: true
 };
@@ -14,6 +15,7 @@ let phabVideoEnabled = true;
 let phabPasteEnabled = true;
 let phabTryLinkEnabled = true;
 let phabTryCommentIconsEnabled = true;
+let phabApkChipsEnabled = true;
 let phabUnsubmittedIndicatorEnabled = true;
 let phabFileNotAttachedEnabled = true;
 let phabPasteListenerAttached = false;
@@ -1249,7 +1251,29 @@ function phabCreateApkChip(link) {
   return chip;
 }
 
+function phabCreateApkChipRow(containerKey) {
+  const row = document.createElement("div");
+  row.dataset[containerKey] = "true";
+  row.style.display = "flex";
+  row.style.flexWrap = "nowrap";
+  row.style.alignItems = "center";
+  row.style.gap = "6px";
+  row.style.marginTop = "8px";
+  row.style.clear = "both";
+  row.style.overflowX = "auto";
+  return row;
+}
+
 function phabRenderCommentApkLinks(anchor, apkLinks) {
+  if (!phabApkChipsEnabled) {
+    const container = phabGetCommentTryContainer(anchor);
+    const state = container ? phabGetCommentApkState(container, false) : null;
+    if (state?.row) {
+      state.row.remove();
+      state.row = null;
+    }
+    return;
+  }
   const container = phabGetCommentTryContainer(anchor);
   if (!container) return;
   const state = phabGetCommentApkState(container, true);
@@ -1271,14 +1295,7 @@ function phabRenderCommentApkLinks(anchor, apkLinks) {
     return;
   }
   if (!row) {
-    row = document.createElement("div");
-    row.dataset.phabCommentApkLinks = "true";
-    row.style.display = "flex";
-    row.style.flexWrap = "wrap";
-    row.style.gap = "6px";
-    row.style.marginTop = "8px";
-    row.style.paddingTop = "4px";
-    row.style.clear = "both";
+    row = phabCreateApkChipRow("phabCommentApkLinks");
     container.appendChild(row);
   }
   state.row = row;
@@ -1499,40 +1516,13 @@ function phabRenderTryApkLinks(dd, apkLinks) {
     ? apkLinks.filter((link) => typeof link?.label === "string" && typeof link?.url === "string" && link.label && link.url)
     : [];
   if (!dd || !links.length) return;
-  links.forEach((link, index) => {
-    const entry = document.createElement("div");
-    entry.dataset.phabApkEntry = "true";
-    entry.style.display = "flex";
-    entry.style.alignItems = "center";
-    entry.style.gap = "4px";
-    entry.style.whiteSpace = "nowrap";
-    const icon = document.createElement("img");
-    icon.src = phabRuntime.runtime.getURL(phabGetApkIconPath(link.label));
-    icon.alt = "";
-    icon.width = 24;
-    icon.height = 24;
-    icon.setAttribute("aria-hidden", "true");
-    icon.style.flex = "0 0 auto";
-    icon.style.width = "24px";
-    icon.style.height = "24px";
-    const anchor = document.createElement("a");
-    anchor.href = link.url;
-    anchor.target = "_blank";
-    anchor.rel = "noreferrer";
-    anchor.download = phabBuildApkDownloadFilename(link.label);
-    anchor.dataset.phabApkFilename = link.label;
-    anchor.textContent = link.label;
-    anchor.addEventListener("click", (event) => {
-      event.preventDefault();
-      phabRuntime.runtime.sendMessage({
-        type: "moz-helper:downloadApk",
-        url: link.url,
-        filename: anchor.download || link.label
-      }).catch(() => {});
-    });
-    entry.append(icon, anchor);
-    dd.appendChild(entry);
-  });
+  let row = dd.querySelector("[data-phab-try-apk-links='true']");
+  if (!row) {
+    row = phabCreateApkChipRow("phabTryApkLinks");
+    row.style.paddingTop = "4px";
+    dd.appendChild(row);
+  }
+  row.replaceChildren(...links.map((link) => phabCreateApkChip(link)));
 }
 
 function phabGetApkIconPath(label) {
@@ -1600,10 +1590,12 @@ function phabRenderTryLinkEntry(list, data, statusInfo = null) {
     dd.appendChild(commentAnchor);
   }
 
-  if (statusInfo?.apkLinks?.length || data.apkLinks?.length) {
+  if (phabApkChipsEnabled && (statusInfo?.apkLinks?.length || data.apkLinks?.length)) {
     dd.appendChild(document.createElement("br"));
   }
-  phabRenderTryApkLinks(dd, statusInfo?.apkLinks || data.apkLinks);
+  if (phabApkChipsEnabled) {
+    phabRenderTryApkLinks(dd, statusInfo?.apkLinks || data.apkLinks);
+  }
 
   list.append(dt, dd);
 }
@@ -1744,6 +1736,9 @@ if (typeof globalThis !== "undefined" && typeof globalThis.__mozHelperExposePhab
     },
     phabSetTryCommentIconsEnabled(value) {
       phabTryCommentIconsEnabled = Boolean(value);
+    },
+    phabSetApkChipsEnabled(value) {
+      phabApkChipsEnabled = Boolean(value);
     },
     phabClearTryStatusCache() {
       PHAB_TRY_STATUS_CACHE.clear();
@@ -1901,6 +1896,7 @@ function phabInit() {
     phabPasteEnabled = items.enablePhabricatorPaste ?? true;
     phabTryLinkEnabled = items.enablePhabricatorTryLinks ?? true;
     phabTryCommentIconsEnabled = items.enablePhabricatorTryCommentIcons ?? true;
+    phabApkChipsEnabled = items.enablePhabricatorApkChips ?? true;
     phabUnsubmittedIndicatorEnabled = items.enablePhabricatorUnsubmittedIndicator ?? true;
     phabFileNotAttachedEnabled = items.enablePhabricatorFileNotAttachedNotice ?? true;
     phabRunInitialPasses();
@@ -1922,6 +1918,10 @@ function phabInit() {
     if (changes.enablePhabricatorTryCommentIcons) {
       phabTryCommentIconsEnabled = changes.enablePhabricatorTryCommentIcons.newValue;
       phabProcessCommentTryLinks();
+    }
+    if (changes.enablePhabricatorApkChips) {
+      phabApkChipsEnabled = changes.enablePhabricatorApkChips.newValue;
+      phabRunInitialPasses();
     }
     if (changes.enablePhabricatorUnsubmittedIndicator) {
       phabUnsubmittedIndicatorEnabled = changes.enablePhabricatorUnsubmittedIndicator.newValue;

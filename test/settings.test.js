@@ -29,6 +29,10 @@ describe("MozHelperSettings dependent toggles", () => {
     expect(MozHelperSettings.defaultSettings).to.have.property("enablePhabricatorTryCommentIcons", true);
   });
 
+  it("includes Phabricator APK chip default", () => {
+    expect(MozHelperSettings.defaultSettings).to.have.property("enablePhabricatorApkChips", true);
+  });
+
   it("includes Phabricator unsubmitted indicator default", () => {
     expect(MozHelperSettings.defaultSettings).to.have.property("enablePhabricatorUnsubmittedIndicator", true);
   });
