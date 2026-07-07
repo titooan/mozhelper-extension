@@ -11,6 +11,7 @@ const MozHelperSettings = (() => {
     enablePhabricatorUnsubmittedIndicator: true,
     enablePhabricatorFileNotAttachedNotice: true,
     enableBugzilla: true,
+    enableBugzillaContextMenu: true,
     enableGithubTryStatusIcons: true,
     enableTreeherder: true,
     enableTreeherderUnitTests: true,

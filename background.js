@@ -24,6 +24,9 @@ const APK_JOB_LABELS = {
   "signing-apk-fenix-debug": "fenix-debug.apk",
   "signing-apk-focus-debug": "focus-debug.apk"
 };
+const BUGZILLA_BUG_LINK_TARGET_PATTERNS = ["https://bugzilla.mozilla.org/show_bug.cgi?*"];
+const BUGZILLA_MENU_ID_COPY_BUG_ID = "moz-helper-copy-bug-id";
+const BUGZILLA_MENU_ID_COPY_BUG_MARKDOWN = "moz-helper-copy-bug-markdown";
 
 function parseJobTimestamp(value) {
   if (value == null) {
@@ -277,6 +280,72 @@ async function fetchBug(bugId) {
     bugCache.set(bugId, null);
     return null;
   }
+}
+
+function extractBugId(linkUrl) {
+  try {
+    const id = new URL(linkUrl).searchParams.get("id");
+    return id && id.trim() ? id.trim() : null;
+  } catch (error) {
+    return null;
+  }
+}
+
+function buildBugReferenceText(linkUrl) {
+  const bugId = extractBugId(linkUrl);
+  return bugId ? `Bug ${bugId}` : null;
+}
+
+function buildBugMarkdownLink(linkUrl) {
+  const referenceText = buildBugReferenceText(linkUrl);
+  return referenceText ? `[${referenceText}](${linkUrl})` : null;
+}
+
+function setBugzillaContextMenuEnabled(enabled) {
+  if (!runtime.contextMenus) return;
+  runtime.contextMenus.removeAll(() => {
+    if (!enabled) return;
+    runtime.contextMenus.create({
+      id: BUGZILLA_MENU_ID_COPY_BUG_ID,
+      title: "Copy Bug ID",
+      contexts: ["link"],
+      targetUrlPatterns: BUGZILLA_BUG_LINK_TARGET_PATTERNS
+    });
+    runtime.contextMenus.create({
+      id: BUGZILLA_MENU_ID_COPY_BUG_MARKDOWN,
+      title: "Copy Bug as Markdown Link",
+      contexts: ["link"],
+      targetUrlPatterns: BUGZILLA_BUG_LINK_TARGET_PATTERNS
+    });
+  });
+}
+
+if (runtime.contextMenus) {
+  runtime.contextMenus.onClicked.addListener((info) => {
+    if (info.menuItemId === BUGZILLA_MENU_ID_COPY_BUG_ID) {
+      const text = buildBugReferenceText(info.linkUrl || "");
+      if (!text) return;
+      navigator.clipboard.writeText(text).catch((error) => {
+        console.error("[MozHelper][Bugzilla] Copy bug ID failed:", error);
+      });
+    } else if (info.menuItemId === BUGZILLA_MENU_ID_COPY_BUG_MARKDOWN) {
+      const markdown = buildBugMarkdownLink(info.linkUrl || "");
+      if (!markdown) return;
+      navigator.clipboard.writeText(markdown).catch((error) => {
+        console.error("[MozHelper][Bugzilla] Copy bug markdown link failed:", error);
+      });
+    }
+  });
+
+  runtime.storage.sync.get({ enableBugzillaContextMenu: true }).then((items) => {
+    setBugzillaContextMenuEnabled(items.enableBugzillaContextMenu !== false);
+  });
+  runtime.storage.onChanged.addListener((changes, area) => {
+    if (area !== "sync") return;
+    if (changes.enableBugzillaContextMenu) {
+      setBugzillaContextMenuEnabled(changes.enableBugzillaContextMenu.newValue !== false);
+    }
+  });
 }
 
 runtime.runtime.onMessage.addListener((message, sender, sendResponse) => {

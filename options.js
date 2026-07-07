@@ -10,6 +10,7 @@ document.addEventListener("DOMContentLoaded", () => {
     enablePhabricatorUnsubmittedIndicator: document.getElementById("enablePhabricatorUnsubmittedIndicator"),
     enablePhabricatorFileNotAttachedNotice: document.getElementById("enablePhabricatorFileNotAttachedNotice"),
     enableBugzilla: document.getElementById("enableBugzilla"),
+    enableBugzillaContextMenu: document.getElementById("enableBugzillaContextMenu"),
     enableGithubTryStatusIcons: document.getElementById("enableGithubTryStatusIcons"),
     enableTreeherder: document.getElementById("enableTreeherder"),
     enableTreeherderUnitTests: document.getElementById("enableTreeherderUnitTests"),

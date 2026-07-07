@@ -37,6 +37,8 @@
   },
   "permissions": [
     "activeTab",
+    "clipboardWrite",
+    "contextMenus",
     "downloads",
     "storage"
   ],
