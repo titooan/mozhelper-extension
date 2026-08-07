@@ -11,6 +11,7 @@ document.addEventListener("DOMContentLoaded", () => {
     enablePhabricatorFileNotAttachedNotice: document.getElementById("enablePhabricatorFileNotAttachedNotice"),
     enableBugzilla: document.getElementById("enableBugzilla"),
     enableBugzillaContextMenu: document.getElementById("enableBugzillaContextMenu"),
+    enableBugzillaCopyIdButton: document.getElementById("enableBugzillaCopyIdButton"),
     enableGithubTryStatusIcons: document.getElementById("enableGithubTryStatusIcons"),
     enableTreeherder: document.getElementById("enableTreeherder"),
     enableTreeherderUnitTests: document.getElementById("enableTreeherderUnitTests"),

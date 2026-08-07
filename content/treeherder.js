@@ -606,34 +606,6 @@ function treeherderRemoveMacrobenchmarkPerformanceTable() {
   document.querySelectorAll(".mozhelper-macrobenchmark-table").forEach((el) => el.remove());
 }
 
-async function treeherderCopyText(text) {
-  if (!text) return false;
-  try {
-    if (navigator.clipboard?.writeText) {
-      await navigator.clipboard.writeText(text);
-      return true;
-    }
-  } catch (_error) {
-    // fallback below
-  }
-  try {
-    const textarea = document.createElement("textarea");
-    textarea.value = text;
-    textarea.setAttribute("readonly", "");
-    textarea.style.position = "fixed";
-    textarea.style.opacity = "0";
-    textarea.style.left = "-9999px";
-    document.body.appendChild(textarea);
-    textarea.focus();
-    textarea.select();
-    const copied = document.execCommand("copy");
-    textarea.remove();
-    return copied;
-  } catch (_error) {
-    return false;
-  }
-}
-
 function treeherderInjectMacrobenchmarkPerformanceTable(markdownTable) {
   const parsed = treeherderParseMarkdownTable(markdownTable);
   if (!parsed) return false;
@@ -717,35 +689,7 @@ function treeherderInjectMacrobenchmarkPerformanceTable(markdownTable) {
   copyButton.addEventListener("blur", setButtonIdleStyle);
   copyButton.addEventListener("mousedown", setButtonPressedStyle);
 
-  const tooltip = document.createElement("span");
-  tooltip.style.position = "absolute";
-  tooltip.style.right = "0";
-  tooltip.style.top = "calc(100% + 6px)";
-  tooltip.style.maxWidth = "260px";
-  tooltip.style.whiteSpace = "nowrap";
-  tooltip.style.background = "#0f172a";
-  tooltip.style.color = "#ffffff";
-  tooltip.style.fontSize = "11px";
-  tooltip.style.lineHeight = "1.2";
-  tooltip.style.padding = "5px 8px";
-  tooltip.style.borderRadius = "6px";
-  tooltip.style.boxShadow = "0 8px 18px rgba(15, 23, 42, 0.25)";
-  tooltip.style.opacity = "0";
-  tooltip.style.pointerEvents = "none";
-  tooltip.style.transform = "translateY(2px)";
-  tooltip.style.transition = "opacity 120ms ease, transform 120ms ease";
-  let tooltipTimer = null;
-  const showTooltip = (message) => {
-    tooltip.textContent = message;
-    tooltip.style.opacity = "1";
-    tooltip.style.transform = "translateY(0)";
-    if (tooltipTimer) clearTimeout(tooltipTimer);
-    tooltipTimer = setTimeout(() => {
-      tooltip.style.opacity = "0";
-      tooltip.style.transform = "translateY(2px)";
-      tooltipTimer = null;
-    }, 1700);
-  };
+  const tooltip = MozHelperClipboardUi.createTooltip({ align: "right" });
 
   copyButton.addEventListener("mousedown", (event) => {
     event.preventDefault();
@@ -754,8 +698,8 @@ function treeherderInjectMacrobenchmarkPerformanceTable(markdownTable) {
   copyButton.addEventListener("click", async (event) => {
     event.preventDefault();
     event.stopPropagation();
-    const copied = await treeherderCopyText(markdownTable);
-    showTooltip(copied ? "Markdown table copied into clipboard" : "Failed to copy markdown table");
+    const copied = await MozHelperClipboardUi.copyText(markdownTable);
+    tooltip.show(copied ? "Markdown table copied into clipboard" : "Failed to copy markdown table");
     copyButton.title = copied ? "Copied" : "Copy failed";
     setTimeout(() => {
       copyButton.title = "Copy markdown table";
@@ -763,7 +707,7 @@ function treeherderInjectMacrobenchmarkPerformanceTable(markdownTable) {
     setButtonHoverStyle();
   });
   copyWrap.appendChild(copyButton);
-  copyWrap.appendChild(tooltip);
+  copyWrap.appendChild(tooltip.element);
   summary.appendChild(copyWrap);
   details.appendChild(summary);
 

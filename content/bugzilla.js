@@ -153,8 +153,89 @@ function bugzillaGetPasteUpdate(original, selectionStart, selectionEnd, selected
 }
 
 const bugzillaStorage = (typeof browser !== "undefined" ? browser.storage : chrome.storage);
-const bugzillaDefaultSettings = { enableBugzilla: true };
+const bugzillaDefaultSettings = {
+  enableBugzilla: true,
+  enableBugzillaCopyIdButton: true
+};
 let bugzillaEnabled = true;
+let bugzillaCopyIdButtonEnabled = true;
+
+function bugzillaFindBugIdLink() {
+  const container = document.getElementById("field-value-bug_id");
+  if (!container) return null;
+  return container.querySelector("a") || (container.tagName === "A" ? container : null);
+}
+
+function bugzillaBuildCopyIdButton(anchor) {
+  const wrap = document.createElement("span");
+  wrap.className = "mozhelper-copy-id-button";
+  wrap.style.position = "relative";
+  wrap.style.display = "inline-flex";
+  wrap.style.verticalAlign = "middle";
+  wrap.style.marginLeft = "4px";
+
+  const button = document.createElement("button");
+  button.type = "button";
+  button.title = "Copy bug ID";
+  button.setAttribute("aria-label", "Copy bug ID");
+  button.style.display = "inline-flex";
+  button.style.alignItems = "center";
+  button.style.justifyContent = "center";
+  button.style.border = "1px solid #cbd5e1";
+  button.style.borderRadius = "4px";
+  button.style.background = "#ffffff";
+  button.style.color = "#334155";
+  button.style.padding = "2px 4px";
+  button.style.lineHeight = "1";
+  button.style.cursor = "pointer";
+  button.style.transition = "background-color 120ms ease, border-color 120ms ease";
+  button.innerHTML =
+    '<svg width="12" height="12" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M16 1H6a2 2 0 0 0-2 2v12h2V3h10V1m3 4H10a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2m0 16H10V7h9v14Z"/></svg>';
+
+  const setIdleStyle = () => {
+    button.style.background = "#ffffff";
+    button.style.borderColor = "#cbd5e1";
+  };
+  const setHoverStyle = () => {
+    button.style.background = "#f8fafc";
+    button.style.borderColor = "#94a3b8";
+  };
+  setIdleStyle();
+  button.addEventListener("mouseenter", setHoverStyle);
+  button.addEventListener("mouseleave", setIdleStyle);
+  button.addEventListener("mousedown", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+  });
+
+  const tooltip = MozHelperClipboardUi.createTooltip({ align: "left" });
+
+  button.addEventListener("click", async (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const copied = await MozHelperClipboardUi.copyText(anchor.textContent.trim());
+    tooltip.show(copied ? "Bug ID copied into clipboard" : "Failed to copy bug ID");
+  });
+
+  wrap.appendChild(button);
+  wrap.appendChild(tooltip.element);
+  return wrap;
+}
+
+function bugzillaAttachCopyIdButton() {
+  if (!bugzillaCopyIdButtonEnabled) return;
+  const anchor = bugzillaFindBugIdLink();
+  if (!anchor || anchor.dataset.mozHelperCopyIdButton === "true") return;
+  const button = bugzillaBuildCopyIdButton(anchor);
+  anchor.insertAdjacentElement("afterend", button);
+  anchor.dataset.mozHelperCopyIdButton = "true";
+}
+
+function bugzillaRemoveCopyIdButton() {
+  document.querySelectorAll(".mozhelper-copy-id-button").forEach((el) => el.remove());
+  const anchor = bugzillaFindBugIdLink();
+  if (anchor) delete anchor.dataset.mozHelperCopyIdButton;
+}
 
 function bugzillaHandlePaste(event) {
   if (!bugzillaEnabled) return;
@@ -192,6 +273,12 @@ function bugzillaAttachToCommentField() {
 function bugzillaInit() {
   bugzillaStorage.sync.get(bugzillaDefaultSettings).then((items) => {
     bugzillaEnabled = items.enableBugzilla ?? true;
+    bugzillaCopyIdButtonEnabled = items.enableBugzillaCopyIdButton ?? true;
+    if (bugzillaCopyIdButtonEnabled) {
+      bugzillaAttachCopyIdButton();
+    } else {
+      bugzillaRemoveCopyIdButton();
+    }
   });
   const runtime = (typeof browser !== "undefined" ? browser : chrome);
   runtime.storage.onChanged.addListener((changes, area) => {
@@ -199,9 +286,20 @@ function bugzillaInit() {
     if (changes.enableBugzilla) {
       bugzillaEnabled = changes.enableBugzilla.newValue;
     }
+    if (changes.enableBugzillaCopyIdButton) {
+      bugzillaCopyIdButtonEnabled = changes.enableBugzillaCopyIdButton.newValue;
+      if (bugzillaCopyIdButtonEnabled) {
+        bugzillaAttachCopyIdButton();
+      } else {
+        bugzillaRemoveCopyIdButton();
+      }
+    }
   });
   bugzillaAttachToCommentField();
-  const observer = new MutationObserver(() => bugzillaAttachToCommentField());
+  const observer = new MutationObserver(() => {
+    bugzillaAttachToCommentField();
+    bugzillaAttachCopyIdButton();
+  });
   observer.observe(document.body, { childList: true, subtree: true });
 }
 

@@ -45,6 +45,7 @@ describe("Treeherder content script", () => {
     global.__mozHelperExposeTreeherderForTests = (api) => {
       treeherderApi = api;
     };
+    await import("../content/shared/clipboardUi.js");
     await import("../content/treeherder.js");
     await Promise.resolve();
     await Promise.resolve();

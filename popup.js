@@ -57,6 +57,7 @@ document.addEventListener("DOMContentLoaded", () => {
     enablePhabricatorFileNotAttachedNotice: document.getElementById("popupEnablePhabricatorFileNotAttachedNotice"),
     enableBugzilla: document.getElementById("popupEnableBugzilla"),
     enableBugzillaContextMenu: document.getElementById("popupEnableBugzillaContextMenu"),
+    enableBugzillaCopyIdButton: document.getElementById("popupEnableBugzillaCopyIdButton"),
     enableGithubTryStatusIcons: document.getElementById("popupEnableGithubTryStatusIcons"),
     enableTreeherder: document.getElementById("popupEnableTreeherder"),
     enableTreeherderUnitTests: document.getElementById("popupEnableTreeherderUnitTests"),

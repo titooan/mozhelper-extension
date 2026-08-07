@@ -73,13 +73,13 @@
         "https://bugzilla*.mozilla.org/*",
         "https://bugzilla*.allizom.org/*"
       ],
-      "js": ["content/bugzilla.js"],
+      "js": ["content/shared/clipboardUi.js", "content/bugzilla.js"],
       "run_at": "document_idle",
       "all_frames": true
     },
     {
       "matches": ["https://treeherder.mozilla.org/*"],
-      "js": ["content/treeherder.js"],
+      "js": ["content/shared/clipboardUi.js", "content/treeherder.js"],
       "run_at": "document_idle"
     },
     {
