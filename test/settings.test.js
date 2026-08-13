@@ -45,6 +45,10 @@ describe("MozHelperSettings dependent toggles", () => {
     expect(MozHelperSettings.defaultSettings).to.have.property("enableGithubTryStatusIcons", true);
   });
 
+  it("includes Bugzilla Take and assign default", () => {
+    expect(MozHelperSettings.defaultSettings).to.have.property("enableBugzillaTakeAndAssign", true);
+  });
+
   it("disables child checkbox and label when parent unchecked", () => {
     const dom = new JSDOM(`
       <label class="parent">
