@@ -153,8 +153,50 @@ function bugzillaGetPasteUpdate(original, selectionStart, selectionEnd, selected
 }
 
 const bugzillaStorage = (typeof browser !== "undefined" ? browser.storage : chrome.storage);
-const bugzillaDefaultSettings = { enableBugzilla: true };
+const bugzillaDefaultSettings = {
+  enableBugzilla: true,
+  enableBugzillaTakeAndAssign: true
+};
 let bugzillaEnabled = true;
+let bugzillaTakeAndAssignEnabled = true;
+
+function bugzillaHandleTakeAndAssignClick(event) {
+  const button = event.currentTarget;
+  if (!bugzillaTakeAndAssignEnabled) return;
+
+  const status = document.getElementById("bug_status");
+  if (!status || !Array.from(status.options).some((option) => option.value === "ASSIGNED")) {
+    return;
+  }
+
+  status.value = "ASSIGNED";
+  status.dispatchEvent(new Event("change", { bubbles: true }));
+}
+
+function bugzillaSyncTakeAndAssignButtons(root = document) {
+  const buttons = [];
+  if (root.nodeType === Node.ELEMENT_NODE && root.matches(".take-btn")) {
+    buttons.push(root);
+  }
+  if (root.querySelectorAll) {
+    buttons.push(...root.querySelectorAll(".take-btn"));
+  }
+  buttons.forEach((button) => {
+    if (button.dataset.mozhelperTakeLabel == null) {
+      button.dataset.mozhelperTakeLabel = button.textContent.trim();
+    }
+    if (!button.dataset.mozhelperTakeAndAssignHandled) {
+      button.addEventListener("click", bugzillaHandleTakeAndAssignClick);
+      button.dataset.mozhelperTakeAndAssignHandled = "true";
+    }
+    const label = bugzillaTakeAndAssignEnabled
+      ? "Take and assign"
+      : button.dataset.mozhelperTakeLabel;
+    if (button.textContent.trim() !== label) {
+      button.textContent = label;
+    }
+  });
+}
 
 function bugzillaHandlePaste(event) {
   if (!bugzillaEnabled) return;
@@ -192,6 +234,8 @@ function bugzillaAttachToCommentField() {
 function bugzillaInit() {
   bugzillaStorage.sync.get(bugzillaDefaultSettings).then((items) => {
     bugzillaEnabled = items.enableBugzilla ?? true;
+    bugzillaTakeAndAssignEnabled = items.enableBugzillaTakeAndAssign ?? true;
+    bugzillaSyncTakeAndAssignButtons();
   });
   const runtime = (typeof browser !== "undefined" ? browser : chrome);
   runtime.storage.onChanged.addListener((changes, area) => {
@@ -199,9 +243,23 @@ function bugzillaInit() {
     if (changes.enableBugzilla) {
       bugzillaEnabled = changes.enableBugzilla.newValue;
     }
+    if (changes.enableBugzillaTakeAndAssign) {
+      bugzillaTakeAndAssignEnabled = changes.enableBugzillaTakeAndAssign.newValue;
+      bugzillaSyncTakeAndAssignButtons();
+    }
   });
   bugzillaAttachToCommentField();
-  const observer = new MutationObserver(() => bugzillaAttachToCommentField());
+  bugzillaSyncTakeAndAssignButtons();
+  const observer = new MutationObserver((records) => {
+    bugzillaAttachToCommentField();
+    records.forEach((record) => {
+      record.addedNodes.forEach((node) => {
+        if (node.nodeType === Node.ELEMENT_NODE) {
+          bugzillaSyncTakeAndAssignButtons(node);
+        }
+      });
+    });
+  });
   observer.observe(document.body, { childList: true, subtree: true });
 }
 
