@@ -57,6 +57,7 @@ Non-goals:
 - `tools/webext-diag-polyfill.cjs`: polyfill required by `web-ext lint` in this repo.
 - `build/`: generated build directory used for packaging/signing.
 - `.github/workflows/release.yml`: tag-triggered release workflow.
+- `.github/workflows/create-minor-release-tag.yml`: owner-restricted manual workflow that creates the next minor-version tag from the latest GitHub release.
 
 ## How It Runs
 
@@ -219,6 +220,8 @@ Versioning/release:
 
 - GitHub release workflow triggers on tags matching `vX.Y.Z`.
 - Workflow syncs `manifest.json` version with tag, runs tests/build, signs via AMO credentials, then creates GitHub release.
+- Run **Create minor release tag** from the default branch in the GitHub Actions UI to create `vMAJOR.(MINOR+1).0` from the latest published GitHub release. It is restricted to the `titooan` account.
+- Configure the `RELEASE_PAT` repository secret with a fine-grained personal access token that has repository **Contents: read and write** permission. The separate token is required because tags pushed with `GITHUB_TOKEN` do not trigger the tag-based release workflow.
 
 ## Known Risks / TODO Areas
 
