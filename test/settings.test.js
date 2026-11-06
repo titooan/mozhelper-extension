@@ -37,6 +37,10 @@ describe("MozHelperSettings dependent toggles", () => {
     expect(MozHelperSettings.defaultSettings).to.have.property("enablePhabricatorUnsubmittedIndicator", true);
   });
 
+  it("enables the Phabricator Bugzilla copy link by default", () => {
+    expect(MozHelperSettings.defaultSettings).to.have.property("enablePhabricatorCopyBugLink", true);
+  });
+
   it("includes Treeherder macrobenchmark table default", () => {
     expect(MozHelperSettings.defaultSettings).to.have.property("enableTreeherderMacrobenchmarkTable", true);
   });
@@ -51,6 +55,10 @@ describe("MozHelperSettings dependent toggles", () => {
 
   it("includes Bugzilla Take and assign default", () => {
     expect(MozHelperSettings.defaultSettings).to.have.property("enableBugzillaTakeAndAssign", true);
+  });
+
+  it("enables the Bugzilla copy link button by default", () => {
+    expect(MozHelperSettings.defaultSettings).to.have.property("enableBugzillaCopyLink", true);
   });
 
   it("disables child checkbox and label when parent unchecked", () => {

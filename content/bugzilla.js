@@ -153,12 +153,15 @@ function bugzillaGetPasteUpdate(original, selectionStart, selectionEnd, selected
 }
 
 const bugzillaStorage = (typeof browser !== "undefined" ? browser.storage : chrome.storage);
+const bugzillaRuntime = (typeof browser !== "undefined" ? browser : chrome);
 const bugzillaDefaultSettings = {
   enableBugzilla: true,
-  enableBugzillaTakeAndAssign: true
+  enableBugzillaTakeAndAssign: true,
+  enableBugzillaCopyLink: true
 };
 let bugzillaEnabled = true;
 let bugzillaTakeAndAssignEnabled = true;
+let bugzillaCopyLinkEnabled = true;
 
 function bugzillaHandleTakeAndAssignClick(event) {
   const button = event.currentTarget;
@@ -198,6 +201,116 @@ function bugzillaSyncTakeAndAssignButtons(root = document) {
   });
 }
 
+function bugzillaGetCopyPayload(bugId) {
+  if (!/^\d+$/.test(String(bugId || ""))) return null;
+  const text = `Bug ${bugId}`;
+  const url = `https://bugzilla.mozilla.org/show_bug.cgi?id=${bugId}`;
+  return { text, html: `<a href="${url}">${text}</a>`, url };
+}
+
+async function bugzillaCopyBugLink(button) {
+  const bugLink = document.querySelector("#field-value-bug_id a[href]");
+  if (!bugLink) return;
+  let bugId;
+  try {
+    bugId = new URL(bugLink.href).searchParams.get("id");
+  } catch (_error) {
+    return;
+  }
+  const payload = bugzillaGetCopyPayload(bugId);
+  if (!payload || !navigator.clipboard?.write || typeof ClipboardItem === "undefined") {
+    bugzillaShowCopyStatus(button, false);
+    return;
+  }
+  try {
+    await navigator.clipboard.write([new ClipboardItem({
+      "text/plain": new Blob([payload.text], { type: "text/plain" }),
+      "text/html": new Blob([payload.html], { type: "text/html" })
+    })]);
+    bugzillaShowCopyStatus(button, true);
+  } catch (_error) {
+    bugzillaShowCopyStatus(button, false);
+  }
+}
+
+function bugzillaShowCopyStatus(button, copied) {
+  const message = copied ? "Copied" : "Copy failed";
+  button.setAttribute("aria-label", copied ? "Copy Bug link" : message);
+  const tooltip = button.querySelector(".mozhelper-copy-bug-tooltip");
+  if (tooltip) {
+    tooltip.textContent = message;
+    tooltip.hidden = false;
+  }
+  if (button._mozHelperStatusTimer) clearTimeout(button._mozHelperStatusTimer);
+  button._mozHelperStatusTimer = setTimeout(() => {
+    if (tooltip) tooltip.hidden = true;
+    button.setAttribute("aria-label", "Copy Bug link");
+  }, 1500);
+}
+
+function bugzillaIsDarkTheme(element) {
+  let current = element;
+  while (current) {
+    const background = getComputedStyle(current).backgroundColor;
+    const match = background.match(/rgba?\((\d+(?:\.\d+)?),\s*(\d+(?:\.\d+)?),\s*(\d+(?:\.\d+)?)(?:,\s*([\d.]+))?\)/);
+    if (match && (match[4] == null || Number(match[4]) > 0)) {
+      const [red, green, blue] = match.slice(1, 4).map(Number);
+      return (0.2126 * red + 0.7152 * green + 0.0722 * blue) < 128;
+    }
+    current = current.parentElement;
+  }
+  return window.matchMedia?.("(prefers-color-scheme: dark)").matches ?? false;
+}
+
+function bugzillaApplyCopyButtonTheme(button) {
+  const icon = button.querySelector("img");
+  if (icon) icon.style.filter = bugzillaIsDarkTheme(button) ? "invert(1)" : "none";
+}
+
+function bugzillaSyncCopyButton() {
+  const bugIdField = document.getElementById("field-value-bug_id");
+  const existingButton = bugIdField?.querySelector(".mozhelper-copy-bug-link");
+  if (!bugzillaCopyLinkEnabled) {
+    existingButton?.remove();
+    return;
+  }
+  const bugLink = bugIdField?.querySelector("a[href]");
+  if (!bugLink) return;
+  if (existingButton) {
+    bugzillaApplyCopyButtonTheme(existingButton);
+    return;
+  }
+
+  const button = document.createElement("button");
+  const icon = document.createElement("img");
+  const tooltip = document.createElement("span");
+  const regularIcon = bugzillaRuntime.runtime.getURL("icons/copy-regular-full.svg");
+  const solidIcon = bugzillaRuntime.runtime.getURL("icons/copy-solid-full.svg");
+  button.type = "button";
+  button.className = "mozhelper-copy-bug-link";
+  button.title = "Copy Bug link";
+  button.setAttribute("aria-label", "Copy Bug link");
+  button.style.cssText = "position:relative;display:inline-flex;align-items:center;justify-content:center;margin-inline-start:6px;padding:2px;border:0;background:transparent;color:inherit;cursor:pointer;vertical-align:middle;";
+  icon.src = regularIcon;
+  icon.alt = "";
+  icon.width = 14;
+  icon.height = 14;
+  icon.style.cssText = "display:block;width:14px;height:14px;";
+  tooltip.className = "mozhelper-copy-bug-tooltip";
+  tooltip.setAttribute("role", "status");
+  tooltip.textContent = "Copied";
+  tooltip.hidden = true;
+  tooltip.style.cssText = "position:absolute;z-index:10000;bottom:calc(100% + 6px);left:50%;transform:translateX(-50%);padding:3px 7px;border-radius:3px;background:#222;color:#fff;font:12px/1.3 sans-serif;white-space:nowrap;pointer-events:none;";
+  button.append(icon, tooltip);
+  button.addEventListener("mouseenter", () => { icon.src = solidIcon; });
+  button.addEventListener("mouseleave", () => { icon.src = regularIcon; });
+  button.addEventListener("focus", () => { icon.src = solidIcon; });
+  button.addEventListener("blur", () => { icon.src = regularIcon; });
+  button.addEventListener("click", () => bugzillaCopyBugLink(button));
+  bugLink.after(button);
+  bugzillaApplyCopyButtonTheme(button);
+}
+
 function bugzillaHandlePaste(event) {
   if (!bugzillaEnabled) return;
   const target = event.target;
@@ -235,7 +348,9 @@ function bugzillaInit() {
   bugzillaStorage.sync.get(bugzillaDefaultSettings).then((items) => {
     bugzillaEnabled = items.enableBugzilla ?? true;
     bugzillaTakeAndAssignEnabled = items.enableBugzillaTakeAndAssign ?? true;
+    bugzillaCopyLinkEnabled = items.enableBugzillaCopyLink ?? true;
     bugzillaSyncTakeAndAssignButtons();
+    bugzillaSyncCopyButton();
   });
   const runtime = (typeof browser !== "undefined" ? browser : chrome);
   runtime.storage.onChanged.addListener((changes, area) => {
@@ -247,11 +362,17 @@ function bugzillaInit() {
       bugzillaTakeAndAssignEnabled = changes.enableBugzillaTakeAndAssign.newValue;
       bugzillaSyncTakeAndAssignButtons();
     }
+    if (changes.enableBugzillaCopyLink) {
+      bugzillaCopyLinkEnabled = changes.enableBugzillaCopyLink.newValue ?? true;
+      bugzillaSyncCopyButton();
+    }
   });
   bugzillaAttachToCommentField();
   bugzillaSyncTakeAndAssignButtons();
+  bugzillaSyncCopyButton();
   const observer = new MutationObserver((records) => {
     bugzillaAttachToCommentField();
+    bugzillaSyncCopyButton();
     records.forEach((record) => {
       record.addedNodes.forEach((node) => {
         if (node.nodeType === Node.ELEMENT_NODE) {
@@ -261,6 +382,11 @@ function bugzillaInit() {
     });
   });
   observer.observe(document.body, { childList: true, subtree: true });
+  const themeObserver = new MutationObserver(() => bugzillaSyncCopyButton());
+  [document.documentElement, document.body].filter(Boolean).forEach((element) => {
+    themeObserver.observe(element, { attributes: true, attributeFilter: ["class", "style"] });
+  });
+  window.matchMedia?.("(prefers-color-scheme: dark)").addEventListener?.("change", bugzillaSyncCopyButton);
 }
 
 bugzillaInit();

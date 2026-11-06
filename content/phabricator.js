@@ -9,7 +9,8 @@ const phabDefaultSettings = {
   enablePhabricatorTryCommentIcons: true,
   enablePhabricatorApkChips: true,
   enablePhabricatorUnsubmittedIndicator: true,
-  enablePhabricatorFileNotAttachedNotice: true
+  enablePhabricatorFileNotAttachedNotice: true,
+  enablePhabricatorCopyBugLink: true
 };
 let phabVideoEnabled = true;
 let phabPasteEnabled = true;
@@ -18,6 +19,7 @@ let phabTryCommentIconsEnabled = true;
 let phabApkChipsEnabled = true;
 let phabUnsubmittedIndicatorEnabled = true;
 let phabFileNotAttachedEnabled = true;
+let phabCopyBugLinkEnabled = true;
 let phabPasteListenerAttached = false;
 let phabPasteListenerDocument = null;
 let phabTryTooltipNode = null;
@@ -33,6 +35,7 @@ let phabUnsubmittedViewportListenersBound = false;
 let phabUnsubmittedInputListenerBound = false;
 let phabUnsubmittedUpdateSequence = 0;
 let phabUnsubmittedPendingReason = null;
+let phabCopyBugLinkObserver = null;
 const PHAB_COMMENT_TRY_ICONS = new WeakMap();
 
 const PHAB_VIDEO_EXTENSIONS = [".mov", ".mp4", ".webm", ".m4v"];
@@ -45,6 +48,156 @@ const PHAB_FILE_EXTENSIONS = [
 const PHAB_TRY_LINK_PATTERN = /^https:\/\/treeherder\.mozilla\.org\/(#\/)?jobs\?/i;
 const PHAB_TRY_STATUS_CACHE = new Map();
 const PHAB_COMMENT_APK_STATE = new WeakMap();
+
+function phabGetBugzillaBugId(link) {
+  try {
+    const url = new URL(link.href);
+    const bugId = url.searchParams.get("id");
+    return url.hostname === "bugzilla.mozilla.org" && /^\d+$/.test(bugId || "") ? bugId : null;
+  } catch (_error) {
+    return null;
+  }
+}
+
+function phabIsDarkTheme(element) {
+  let current = element;
+  while (current) {
+    const background = getComputedStyle(current).backgroundColor;
+    const match = background.match(/rgba?\((\d+(?:\.\d+)?),\s*(\d+(?:\.\d+)?),\s*(\d+(?:\.\d+)?)(?:,\s*([\d.]+))?\)/);
+    if (match && (match[4] == null || Number(match[4]) > 0)) {
+      const [red, green, blue] = match.slice(1, 4).map(Number);
+      return (0.2126 * red + 0.7152 * green + 0.0722 * blue) < 128;
+    }
+    current = current.parentElement;
+  }
+  return window.matchMedia?.("(prefers-color-scheme: dark)").matches ?? false;
+}
+
+function phabApplyCopyBugLinkTheme(button) {
+  const icon = button.querySelector("img");
+  if (!icon) return;
+  const filter = phabIsDarkTheme(button) ? "invert(1)" : "none";
+  if (icon.style.filter !== filter) icon.style.filter = filter;
+}
+
+function phabCopyLink(button, text, href) {
+  const tooltip = button.querySelector(".mozhelper-copy-bug-tooltip");
+  const showStatus = (copied) => {
+    if (!tooltip) return;
+    tooltip.textContent = copied ? "Copied" : "Copy failed";
+    tooltip.hidden = false;
+    if (button._mozHelperStatusTimer) clearTimeout(button._mozHelperStatusTimer);
+    button._mozHelperStatusTimer = setTimeout(() => { tooltip.hidden = true; }, 1500);
+  };
+  if (!navigator.clipboard?.write || typeof ClipboardItem === "undefined") {
+    showStatus(false);
+    return;
+  }
+  navigator.clipboard.write([new ClipboardItem({
+    "text/plain": new Blob([text], { type: "text/plain" }),
+    "text/html": new Blob([`<a href="${href}">${text}</a>`], { type: "text/html" })
+  })]).then(() => showStatus(true)).catch(() => showStatus(false));
+}
+
+function phabCreateCopyLinkButton(className, text, href, accessibleLabel, getPayload = () => ({ text, href })) {
+  const button = document.createElement("button");
+  const icon = document.createElement("img");
+  const tooltip = document.createElement("span");
+  const regularIcon = phabRuntime.runtime.getURL("icons/copy-regular-full.svg");
+  const solidIcon = phabRuntime.runtime.getURL("icons/copy-solid-full.svg");
+  button.type = "button";
+  button.className = className;
+  button.title = accessibleLabel;
+  button.setAttribute("aria-label", accessibleLabel);
+  button.style.cssText = "position:relative;display:inline-flex;align-items:center;justify-content:center;margin-inline-start:6px;padding:2px;border:0;background:transparent;color:inherit;cursor:pointer;vertical-align:middle;";
+  icon.src = regularIcon;
+  icon.alt = "";
+  icon.width = 14;
+  icon.height = 14;
+  icon.style.cssText = "display:block;width:14px;height:14px;";
+  tooltip.className = "mozhelper-copy-bug-tooltip";
+  tooltip.setAttribute("role", "status");
+  tooltip.textContent = "Copied";
+  tooltip.hidden = true;
+  tooltip.style.cssText = "position:absolute;z-index:10000;bottom:calc(100% + 6px);left:50%;transform:translateX(-50%);padding:3px 7px;border-radius:3px;background:#222;color:#fff;font:12px/1.3 sans-serif;white-space:nowrap;pointer-events:none;";
+  button.append(icon, tooltip);
+  button.addEventListener("mouseenter", () => { icon.src = solidIcon; });
+  button.addEventListener("mouseleave", () => { icon.src = regularIcon; });
+  button.addEventListener("pointerenter", () => { icon.src = solidIcon; });
+  button.addEventListener("pointerleave", () => { icon.src = regularIcon; });
+  button.addEventListener("focus", () => { icon.src = solidIcon; });
+  button.addEventListener("blur", () => { icon.src = regularIcon; });
+  button.addEventListener("click", () => {
+    const payload = getPayload();
+    if (payload) phabCopyLink(button, payload.text, payload.href);
+  });
+  return button;
+}
+
+function phabSyncCopyBugLinkButton() {
+  const key = [...document.querySelectorAll("dt.phui-property-list-key")]
+    .find((node) => node.textContent.trim() === "Bugzilla Bug ID");
+  const value = key?.nextElementSibling;
+  const link = value?.querySelector("a[href]");
+  const existing = value?.querySelector(".mozhelper-copy-bug-link");
+  if (!phabCopyBugLinkEnabled) {
+    existing?.remove();
+    document.querySelectorAll(".mozhelper-copy-revision-link").forEach((button) => button.remove());
+    return;
+  }
+  const bugId = link && phabGetBugzillaBugId(link);
+  if (!bugId) {
+    existing?.remove();
+    return;
+  }
+  if (existing) {
+    phabApplyCopyBugLinkTheme(existing);
+    return;
+  }
+
+  const button = phabCreateCopyLinkButton(
+    "mozhelper-copy-bug-link",
+    `Bug ${bugId}`,
+    `https://bugzilla.mozilla.org/show_bug.cgi?id=${bugId}`,
+    "Copy Bug link",
+    () => {
+      const currentLink = value.querySelector("a[href]");
+      const currentId = currentLink && phabGetBugzillaBugId(currentLink);
+      return currentId ? { text: `Bug ${currentId}`, href: `https://bugzilla.mozilla.org/show_bug.cgi?id=${currentId}` } : null;
+    }
+  );
+  button.style.transform = "translateY(-1px)";
+  link.after(button);
+  phabApplyCopyBugLinkTheme(button);
+}
+
+function phabSyncCopyRevisionLinkButton() {
+  const crumb = document.querySelector(".phui-crumbs-view .phabricator-last-crumb");
+  const name = crumb?.querySelector(".phui-crumb-name");
+  const revision = name?.textContent.trim().match(/^(D\d+)$/)?.[1];
+  const existing = crumb?.parentElement?.querySelector(".mozhelper-copy-revision-link");
+  if (!phabCopyBugLinkEnabled) {
+    existing?.remove();
+    return;
+  }
+  if (!revision) {
+    existing?.remove();
+    return;
+  }
+  if (existing) {
+    phabApplyCopyBugLinkTheme(existing);
+    return;
+  }
+  const button = phabCreateCopyLinkButton(
+    "mozhelper-copy-revision-link",
+    revision,
+    `https://phabricator.services.mozilla.com/${revision}`,
+    "Copy Differential revision link"
+  );
+  button.style.transform = "translateY(-1px)";
+  name.after(button);
+  phabApplyCopyBugLinkTheme(button);
+}
 const PHAB_SUCCESS_TOOLTIP = "Passed"; // Keep in sync with src/phabricator/tryStatusTooltip.js
 const PHAB_PENDING_TOOLTIP = "Loading"; // Keep in sync with src/phabricator/tryStatusTooltip.js
 const PHAB_UNSUBMITTED_FAVICON = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='30' fill='%23dc2626'/%3E%3C/svg%3E";
@@ -1862,6 +2015,8 @@ function phabUpdateLatestTryLink() {
 }
 
 function phabProcessPage() {
+  phabSyncCopyBugLinkButton();
+  phabSyncCopyRevisionLinkButton();
   phabEnhanceAllVideos();
   phabAttachPasteHandlers();
   phabUpdateLatestTryLink();
@@ -1899,6 +2054,7 @@ function phabInit() {
     phabApkChipsEnabled = items.enablePhabricatorApkChips ?? true;
     phabUnsubmittedIndicatorEnabled = items.enablePhabricatorUnsubmittedIndicator ?? true;
     phabFileNotAttachedEnabled = items.enablePhabricatorFileNotAttachedNotice ?? true;
+    phabCopyBugLinkEnabled = items.enablePhabricatorCopyBugLink ?? true;
     phabRunInitialPasses();
   });
   phabRuntime.storage.onChanged.addListener((changes, area) => {
@@ -1938,7 +2094,21 @@ function phabInit() {
       phabFileNotAttachedEnabled = changes.enablePhabricatorFileNotAttachedNotice.newValue;
       phabUpdateFileNotAttachedNotice();
     }
+    if (changes.enablePhabricatorCopyBugLink) {
+      phabCopyBugLinkEnabled = changes.enablePhabricatorCopyBugLink.newValue ?? true;
+      phabSyncCopyBugLinkButton();
+      phabSyncCopyRevisionLinkButton();
+    }
   });
+  const syncCopyButtonThemes = () => {
+    phabSyncCopyBugLinkButton();
+    phabSyncCopyRevisionLinkButton();
+  };
+  phabCopyBugLinkObserver = new MutationObserver(syncCopyButtonThemes);
+  [document.documentElement, document.body].filter(Boolean).forEach((element) => {
+    phabCopyBugLinkObserver.observe(element, { attributes: true, attributeFilter: ["class", "style"] });
+  });
+  window.matchMedia?.("(prefers-color-scheme: dark)").addEventListener?.("change", syncCopyButtonThemes);
 }
 
 phabInit();

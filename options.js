@@ -9,11 +9,13 @@ document.addEventListener("DOMContentLoaded", () => {
     enablePhabricatorApkChips: document.getElementById("enablePhabricatorApkChips"),
     enablePhabricatorUnsubmittedIndicator: document.getElementById("enablePhabricatorUnsubmittedIndicator"),
     enablePhabricatorFileNotAttachedNotice: document.getElementById("enablePhabricatorFileNotAttachedNotice"),
+    enablePhabricatorCopyBugLink: document.getElementById("enablePhabricatorCopyBugLink"),
     enableBugzilla: document.getElementById("enableBugzilla"),
     enableBugzillaContextMenu: document.getElementById("enableBugzillaContextMenu"),
     enableBugzillaTakeAndAssign: document.getElementById("enableBugzillaTakeAndAssign"),
     enableGithubBugLinks: document.getElementById("enableGithubBugLinks"),
     enableGithubTryStatusIcons: document.getElementById("enableGithubTryStatusIcons"),
+    enableBugzillaCopyLink: document.getElementById("enableBugzillaCopyLink"),
     enableTreeherder: document.getElementById("enableTreeherder"),
     enableTreeherderUnitTests: document.getElementById("enableTreeherderUnitTests"),
     enableTreeherderMacrobenchmarkTable: document.getElementById("enableTreeherderMacrobenchmarkTable")

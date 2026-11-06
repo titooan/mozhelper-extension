@@ -55,11 +55,13 @@ document.addEventListener("DOMContentLoaded", () => {
     enablePhabricatorApkChips: document.getElementById("popupEnablePhabricatorApkChips"),
     enablePhabricatorUnsubmittedIndicator: document.getElementById("popupEnablePhabricatorUnsubmittedIndicator"),
     enablePhabricatorFileNotAttachedNotice: document.getElementById("popupEnablePhabricatorFileNotAttachedNotice"),
+    enablePhabricatorCopyBugLink: document.getElementById("popupEnablePhabricatorCopyBugLink"),
     enableBugzilla: document.getElementById("popupEnableBugzilla"),
     enableBugzillaContextMenu: document.getElementById("popupEnableBugzillaContextMenu"),
     enableBugzillaTakeAndAssign: document.getElementById("popupEnableBugzillaTakeAndAssign"),
     enableGithubBugLinks: document.getElementById("popupEnableGithubBugLinks"),
     enableGithubTryStatusIcons: document.getElementById("popupEnableGithubTryStatusIcons"),
+    enableBugzillaCopyLink: document.getElementById("popupEnableBugzillaCopyLink"),
     enableTreeherder: document.getElementById("popupEnableTreeherder"),
     enableTreeherderUnitTests: document.getElementById("popupEnableTreeherderUnitTests"),
     enableTreeherderMacrobenchmarkTable: document.getElementById("popupEnableTreeherderMacrobenchmarkTable")

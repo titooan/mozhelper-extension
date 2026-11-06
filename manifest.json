@@ -90,7 +90,7 @@
   ],
   "web_accessible_resources": [
     {
-      "resources": ["icons/fenix-debug.svg", "icons/focus.svg", "icons/tests_icon.png", "icons/phabricator-favicon-red.png"],
+      "resources": ["icons/fenix-debug.svg", "icons/focus.svg", "icons/tests_icon.png", "icons/phabricator-favicon-red.png", "icons/copy-regular-full.svg", "icons/copy-solid-full.svg"],
       "matches": ["<all_urls>"]
     }
   ]

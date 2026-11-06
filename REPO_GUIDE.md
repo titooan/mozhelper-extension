@@ -6,6 +6,7 @@ Moz Helper Suite is a Firefox extension (Manifest V3) that bundles small workflo
 
 - Gmail Bugzilla linkifier with hover tooltips
 - Bugzilla markdown paste helper
+- Bugzilla bug-page copy button for copying a bug number as a rich link
 - Phabricator helpers (inline video player, markdown paste, try-link surfacing/status, file-not-attached notice, unsubmitted-comment indicator with floating fallback action)
 - GitHub Firefox PR title Bugzilla links and PR try-link status icons
 - Treeherder helpers (Firebase TestLab shortcut/cost summary + unit-test report shortcut + macrobenchmark Performance table rendering)
@@ -36,7 +37,9 @@ Non-goals:
 - `content/`: runtime content scripts injected per site:
   - `content/gmail.js`
   - `content/bugzilla.js`
+    - Adds a rich-link copy button beside the bug number on bug pages.
   - `content/phabricator.js`
+    - Adds rich-link copy buttons beside Bugzilla Bug ID and the Differential revision ID, controlled by `enablePhabricatorCopyBugLink`.
   - `content/github.js`
   - `content/treeherder.js`
 - `icons/`: shared extension assets, including the Phabricator APK prefix icons `icons/fenix-debug.svg` and `icons/focus.svg`.
@@ -127,7 +130,7 @@ Add or update a helper feature:
    - `settings.js` default state
    - `popup.html` / `popup.js`
    - `options.html` / `options.js`
-   - Phabricator-specific toggles include: `enablePhabricatorPaste`, `enablePhabricatorTryLinks`, `enablePhabricatorTryCommentIcons`, `enablePhabricatorUnsubmittedIndicator`, `enablePhabricatorFileNotAttachedNotice`
+   - Phabricator-specific toggles include: `enablePhabricatorPaste`, `enablePhabricatorTryLinks`, `enablePhabricatorTryCommentIcons`, `enablePhabricatorUnsubmittedIndicator`, `enablePhabricatorFileNotAttachedNotice`, `enablePhabricatorCopyBugLink`
 4. If remote fetch is required, add a new `runtime.onMessage` handler path in `background.js`.
 5. Add/extend tests in `test/`.
 6. Run `npm test` and `npm run build`.
@@ -140,6 +143,8 @@ Add a new site injection:
 4. Add helper modules/tests under `src/` and `test/`.
 
 GitHub-specific toggles include: `enableGithubTryStatusIcons` and `enableGithubBugLinks`; GitHub host access is optional and requested from the popup on GitHub PR pages.
+
+The Bugzilla copy-link button is controlled by `enableBugzillaCopyLink` and appears in the GitHub section of the popup and options page.
 
 Change Treeherder try-status behavior:
 
