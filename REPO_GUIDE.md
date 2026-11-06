@@ -7,7 +7,7 @@ Moz Helper Suite is a Firefox extension (Manifest V3) that bundles small workflo
 - Gmail Bugzilla linkifier with hover tooltips
 - Bugzilla markdown paste helper
 - Phabricator helpers (inline video player, markdown paste, try-link surfacing/status, file-not-attached notice, unsubmitted-comment indicator with floating fallback action)
-- GitHub PR try-link status icons
+- GitHub Firefox PR title Bugzilla links and PR try-link status icons
 - Treeherder helpers (Firebase TestLab shortcut/cost summary + unit-test report shortcut + macrobenchmark Performance table rendering)
 - Shared popup/options settings backed by sync storage
 
@@ -139,7 +139,7 @@ Add a new site injection:
 3. Add settings toggle if needed.
 4. Add helper modules/tests under `src/` and `test/`.
 
-GitHub-specific toggles include: `enableGithubTryStatusIcons`; GitHub host access is optional and requested from the popup on GitHub PR pages.
+GitHub-specific toggles include: `enableGithubTryStatusIcons` and `enableGithubBugLinks`; GitHub host access is optional and requested from the popup on GitHub PR pages.
 
 Change Treeherder try-status behavior:
 

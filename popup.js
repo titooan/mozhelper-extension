@@ -58,6 +58,7 @@ document.addEventListener("DOMContentLoaded", () => {
     enableBugzilla: document.getElementById("popupEnableBugzilla"),
     enableBugzillaContextMenu: document.getElementById("popupEnableBugzillaContextMenu"),
     enableBugzillaTakeAndAssign: document.getElementById("popupEnableBugzillaTakeAndAssign"),
+    enableGithubBugLinks: document.getElementById("popupEnableGithubBugLinks"),
     enableGithubTryStatusIcons: document.getElementById("popupEnableGithubTryStatusIcons"),
     enableTreeherder: document.getElementById("popupEnableTreeherder"),
     enableTreeherderUnitTests: document.getElementById("popupEnableTreeherderUnitTests"),

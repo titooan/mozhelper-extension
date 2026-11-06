@@ -125,8 +125,8 @@
   </header>
 
   <section id="githubPermissionPrompt" class="permission-prompt">
-    <p>Grant GitHub access to show try status icons on this PR.</p>
-    <button id="grantGithubPermission" type="button">Enable GitHub PR badges</button>
+    <p>Grant GitHub access to enable PR bug links and try status icons.</p>
+    <button id="grantGithubPermission" type="button">Enable GitHub PR features</button>
   </section>
 
   <section class="settings-section">
@@ -191,6 +191,10 @@
 
   <section class="settings-section">
     <h2>Github</h2>
+    <label>
+      <input type="checkbox" id="popupEnableGithubBugLinks">
+      Link Bugzilla bugs in Firefox PR titles
+    </label>
     <label>
       <input type="checkbox" id="popupEnableGithubTryStatusIcons">
       Show try status icons on PRs

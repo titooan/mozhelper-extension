@@ -12,6 +12,7 @@ document.addEventListener("DOMContentLoaded", () => {
     enableBugzilla: document.getElementById("enableBugzilla"),
     enableBugzillaContextMenu: document.getElementById("enableBugzillaContextMenu"),
     enableBugzillaTakeAndAssign: document.getElementById("enableBugzillaTakeAndAssign"),
+    enableGithubBugLinks: document.getElementById("enableGithubBugLinks"),
     enableGithubTryStatusIcons: document.getElementById("enableGithubTryStatusIcons"),
     enableTreeherder: document.getElementById("enableTreeherder"),
     enableTreeherderUnitTests: document.getElementById("enableTreeherderUnitTests"),

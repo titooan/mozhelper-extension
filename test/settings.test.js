@@ -41,6 +41,10 @@ describe("MozHelperSettings dependent toggles", () => {
     expect(MozHelperSettings.defaultSettings).to.have.property("enableTreeherderMacrobenchmarkTable", true);
   });
 
+  it("enables GitHub bug links by default", () => {
+    expect(MozHelperSettings.defaultSettings).to.have.property("enableGithubBugLinks", true);
+  });
+
   it("includes GitHub try status icon default", () => {
     expect(MozHelperSettings.defaultSettings).to.have.property("enableGithubTryStatusIcons", true);
   });

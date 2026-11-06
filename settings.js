@@ -14,6 +14,7 @@ const MozHelperSettings = (() => {
     enableBugzillaContextMenu: true,
     enableBugzillaTakeAndAssign: true,
     enableGithubTryStatusIcons: true,
+    enableGithubBugLinks: true,
     enableTreeherder: true,
     enableTreeherderUnitTests: true,
     enableTreeherderMacrobenchmarkTable: true

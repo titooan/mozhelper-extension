@@ -1,7 +1,8 @@
 const githubRuntime = (typeof browser !== "undefined" ? browser : chrome);
 const githubStorage = githubRuntime.storage;
 const githubDefaultSettings = {
-  enableGithubTryStatusIcons: true
+  enableGithubTryStatusIcons: true,
+  enableGithubBugLinks: true
 };
 const GITHUB_TRY_LINK_PATTERN = /^https:\/\/treeherder\.mozilla\.org\/(#\/)?jobs\?/i;
 const GITHUB_TRY_STATUS_CACHE = new Map();
@@ -9,6 +10,7 @@ const GITHUB_TRY_ICONS = new WeakMap();
 const GITHUB_SUCCESS_TOOLTIP = "Passed";
 const GITHUB_PENDING_TOOLTIP = "Loading";
 let githubTryStatusIconsEnabled = true;
+let githubBugLinksEnabled = true;
 let githubTryStatusObserver = null;
 let githubTryTooltipNode = null;
 
@@ -310,9 +312,44 @@ function githubProcessTryLinks(root = document) {
   });
 }
 
+function githubProcessBugLinks() {
+  const isFirefoxPr = /^\/mozilla-firefox\/firefox\/pull\/\d+(?:\/|$)/i.test(location.pathname);
+  if (!githubBugLinksEnabled || !isFirefoxPr) return;
+
+  document.querySelectorAll(".markdown-title").forEach((title) => {
+    const walker = document.createTreeWalker(title, NodeFilter.SHOW_TEXT);
+    const nodes = [];
+    while (walker.nextNode()) {
+      const node = walker.currentNode;
+      if (!node.parentElement?.closest("a")) nodes.push(node);
+    }
+    nodes.forEach((node) => {
+      const pattern = /\bBug\s+(\d+)\b/gi;
+      const text = node.nodeValue;
+      let match;
+      let lastIndex = 0;
+      const fragment = document.createDocumentFragment();
+      while ((match = pattern.exec(text))) {
+        fragment.appendChild(document.createTextNode(text.slice(lastIndex, match.index)));
+        const anchor = document.createElement("a");
+        anchor.href = `https://bugzilla.mozilla.org/show_bug.cgi?id=${match[1]}`;
+        anchor.dataset.mozhelperGithubBugLink = "true";
+        anchor.textContent = match[0];
+        fragment.appendChild(anchor);
+        lastIndex = pattern.lastIndex;
+      }
+      if (lastIndex) {
+        fragment.appendChild(document.createTextNode(text.slice(lastIndex)));
+        node.replaceWith(fragment);
+      }
+    });
+  });
+}
+
 function githubEnsureObserver() {
   if (githubTryStatusObserver || !document.body) return;
   githubTryStatusObserver = new MutationObserver((mutations) => {
+    if (githubBugLinksEnabled) githubProcessBugLinks();
     if (!githubTryStatusIconsEnabled) return;
     for (const mutation of mutations) {
       for (const node of mutation.addedNodes) {
@@ -322,18 +359,24 @@ function githubEnsureObserver() {
       }
     }
   });
-  githubTryStatusObserver.observe(document.body, { childList: true, subtree: true });
+  githubTryStatusObserver.observe(document.body, { childList: true, subtree: true, characterData: true });
 }
 
 function githubInit() {
   githubStorage.sync.get(githubDefaultSettings).then((items) => {
     githubTryStatusIconsEnabled = items.enableGithubTryStatusIcons ?? true;
+    githubBugLinksEnabled = items.enableGithubBugLinks ?? true;
     githubEnsureObserver();
     githubProcessTryLinks();
+    githubProcessBugLinks();
   });
 
   githubRuntime.storage.onChanged.addListener((changes, area) => {
-    if (area !== "sync" || !changes.enableGithubTryStatusIcons) return;
+    if (area !== "sync") return;
+    if (changes.enableGithubBugLinks) {
+      githubBugLinksEnabled = changes.enableGithubBugLinks.newValue ?? true;
+    }
+    if (!changes.enableGithubTryStatusIcons) return;
     githubTryStatusIconsEnabled = changes.enableGithubTryStatusIcons.newValue;
     if (githubTryStatusIconsEnabled) {
       githubEnsureObserver();
