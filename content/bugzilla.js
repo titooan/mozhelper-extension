@@ -208,6 +208,25 @@ function bugzillaGetCopyPayload(bugId) {
   return { text, html: `<a href="${url}">${text}</a>`, url };
 }
 
+function bugzillaEscapeHtml(text) {
+  return String(text).replace(/[&<>"']/g, (character) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;"
+  })[character]);
+}
+
+function bugzillaGetSummaryCopyPayload(bugId, summary) {
+  const bugPayload = bugzillaGetCopyPayload(bugId);
+  const cleanSummary = String(summary || "").replace(/\s+/g, " ").trim();
+  if (!bugPayload || !cleanSummary) return null;
+  const text = `${bugPayload.text} - ${cleanSummary}`;
+  const html = `<a href="${bugPayload.url}">${bugPayload.text}</a> - ${bugzillaEscapeHtml(cleanSummary)}`;
+  return { text, html };
+}
+
 async function bugzillaCopyBugLink(button) {
   const bugLink = document.querySelector("#field-value-bug_id a[href]");
   if (!bugLink) return;
@@ -233,9 +252,53 @@ async function bugzillaCopyBugLink(button) {
   }
 }
 
+function bugzillaFindSummaryHeading() {
+  const summaryField = document.getElementById("field-value-short_desc");
+  return summaryField?.matches("h1") ? summaryField : summaryField?.querySelector("h1") ?? null;
+}
+
+function bugzillaGetSummaryText(heading) {
+  if (!heading) return "";
+  const clone = heading.cloneNode(true);
+  clone.querySelectorAll(".mozhelper-copy-summary").forEach((button) => button.remove());
+  return clone.textContent;
+}
+
+async function bugzillaCopySummary(button) {
+  const bugLink = document.querySelector("#field-value-bug_id a[href]");
+  const summaryHeading = bugzillaFindSummaryHeading();
+  const summary = bugzillaGetSummaryText(summaryHeading);
+  if (!bugLink || !summary) {
+    bugzillaShowCopyStatus(button, false);
+    return;
+  }
+  let bugId;
+  try {
+    bugId = new URL(bugLink.href).searchParams.get("id");
+  } catch (_error) {
+    bugzillaShowCopyStatus(button, false);
+    return;
+  }
+  const payload = bugzillaGetSummaryCopyPayload(bugId, summary);
+  if (!payload || !navigator.clipboard?.write || typeof ClipboardItem === "undefined") {
+    bugzillaShowCopyStatus(button, false);
+    return;
+  }
+  try {
+    await navigator.clipboard.write([new ClipboardItem({
+      "text/plain": new Blob([payload.text], { type: "text/plain" }),
+      "text/html": new Blob([payload.html], { type: "text/html" })
+    })]);
+    bugzillaShowCopyStatus(button, true);
+  } catch (_error) {
+    bugzillaShowCopyStatus(button, false);
+  }
+}
+
 function bugzillaShowCopyStatus(button, copied) {
   const message = copied ? "Copied" : "Copy failed";
-  button.setAttribute("aria-label", copied ? "Copy Bug link" : message);
+  const label = button.dataset.copyLabel || "Copy Bug link";
+  button.setAttribute("aria-label", copied ? label : message);
   const tooltip = button.querySelector(".mozhelper-copy-bug-tooltip");
   if (tooltip) {
     tooltip.textContent = message;
@@ -244,7 +307,7 @@ function bugzillaShowCopyStatus(button, copied) {
   if (button._mozHelperStatusTimer) clearTimeout(button._mozHelperStatusTimer);
   button._mozHelperStatusTimer = setTimeout(() => {
     if (tooltip) tooltip.hidden = true;
-    button.setAttribute("aria-label", "Copy Bug link");
+    button.setAttribute("aria-label", label);
   }, 1500);
 }
 
@@ -267,29 +330,22 @@ function bugzillaApplyCopyButtonTheme(button) {
   if (icon) icon.style.filter = bugzillaIsDarkTheme(button) ? "invert(1)" : "none";
 }
 
-function bugzillaSyncCopyButton() {
-  const bugIdField = document.getElementById("field-value-bug_id");
-  const existingButton = bugIdField?.querySelector(".mozhelper-copy-bug-link");
-  if (!bugzillaCopyLinkEnabled) {
-    existingButton?.remove();
-    return;
-  }
-  const bugLink = bugIdField?.querySelector("a[href]");
-  if (!bugLink) return;
-  if (existingButton) {
-    bugzillaApplyCopyButtonTheme(existingButton);
-    return;
-  }
+function bugzillaRefreshCopyButtonThemes() {
+  document.querySelectorAll(".mozhelper-copy-bug-link, .mozhelper-copy-summary")
+    .forEach(bugzillaApplyCopyButtonTheme);
+}
 
+function bugzillaCreateCopyButton(className, label, clickHandler) {
   const button = document.createElement("button");
   const icon = document.createElement("img");
   const tooltip = document.createElement("span");
   const regularIcon = bugzillaRuntime.runtime.getURL("icons/copy-regular-full.svg");
   const solidIcon = bugzillaRuntime.runtime.getURL("icons/copy-solid-full.svg");
   button.type = "button";
-  button.className = "mozhelper-copy-bug-link";
-  button.title = "Copy Bug link";
-  button.setAttribute("aria-label", "Copy Bug link");
+  button.className = className;
+  button.title = label;
+  button.dataset.copyLabel = label;
+  button.setAttribute("aria-label", label);
   button.style.cssText = "position:relative;display:inline-flex;align-items:center;justify-content:center;margin-inline-start:6px;padding:2px;border:0;background:transparent;color:inherit;cursor:pointer;vertical-align:middle;";
   icon.src = regularIcon;
   icon.alt = "";
@@ -306,9 +362,58 @@ function bugzillaSyncCopyButton() {
   button.addEventListener("mouseleave", () => { icon.src = regularIcon; });
   button.addEventListener("focus", () => { icon.src = solidIcon; });
   button.addEventListener("blur", () => { icon.src = regularIcon; });
-  button.addEventListener("click", () => bugzillaCopyBugLink(button));
-  bugLink.after(button);
+  button.addEventListener("click", () => clickHandler(button));
+  return button;
+}
+
+function bugzillaSyncCopyButton() {
+  const bugIdField = document.getElementById("field-value-bug_id");
+  const existingButton = bugIdField?.querySelector(".mozhelper-copy-bug-link");
+  const summaryHeading = bugzillaFindSummaryHeading();
+  const existingSummaryButtons = Array.from(document.querySelectorAll(".mozhelper-copy-summary"));
+  if (!bugzillaCopyLinkEnabled) {
+    existingButton?.remove();
+    existingSummaryButtons.forEach((button) => button.remove());
+    return;
+  }
+  const bugLink = bugIdField?.querySelector("a[href]");
+  if (!bugLink) return;
+  if (!existingButton) {
+    const button = bugzillaCreateCopyButton("mozhelper-copy-bug-link", "Copy Bug link", bugzillaCopyBugLink);
+    bugLink.after(button);
+    bugzillaApplyCopyButtonTheme(button);
+  }
+  // Idempotent: never move an existing button, so we cannot ping-pong with
+  // page scripts that react to DOM changes. Only drop buttons that were
+  // orphaned by a re-render and create one inside the current heading, so it
+  // sits at the end of the title line.
+  let hasSummaryButton = false;
+  existingSummaryButtons.forEach((button) => {
+    if (!hasSummaryButton && summaryHeading && button.parentElement === summaryHeading) {
+      hasSummaryButton = true;
+    } else {
+      button.remove();
+    }
+  });
+  if (!summaryHeading || hasSummaryButton) return;
+  const button = bugzillaCreateCopyButton("mozhelper-copy-summary", "Copy Bug summary", bugzillaCopySummary);
+  summaryHeading.append(button);
   bugzillaApplyCopyButtonTheme(button);
+}
+
+let bugzillaSyncScheduled = false;
+function bugzillaScheduleSync() {
+  if (bugzillaSyncScheduled) return;
+  bugzillaSyncScheduled = true;
+  setTimeout(() => {
+    bugzillaSyncScheduled = false;
+    bugzillaSyncCopyButton();
+  }, 50);
+}
+
+function bugzillaIsOwnCopyButton(node) {
+  return node.nodeType === Node.ELEMENT_NODE &&
+    (node.classList.contains("mozhelper-copy-bug-link") || node.classList.contains("mozhelper-copy-summary"));
 }
 
 function bugzillaHandlePaste(event) {
@@ -372,21 +477,33 @@ function bugzillaInit() {
   bugzillaSyncCopyButton();
   const observer = new MutationObserver((records) => {
     bugzillaAttachToCommentField();
-    bugzillaSyncCopyButton();
+    let needsCopySync = false;
     records.forEach((record) => {
+      const nodes = [...record.addedNodes, ...record.removedNodes];
+      if (nodes.length && nodes.every(bugzillaIsOwnCopyButton)) return;
+      needsCopySync = true;
       record.addedNodes.forEach((node) => {
         if (node.nodeType === Node.ELEMENT_NODE) {
           bugzillaSyncTakeAndAssignButtons(node);
         }
       });
     });
+    if (needsCopySync) bugzillaScheduleSync();
   });
   observer.observe(document.body, { childList: true, subtree: true });
-  const themeObserver = new MutationObserver(() => bugzillaSyncCopyButton());
+  let themeTimer = null;
+  const scheduleThemeRefresh = () => {
+    if (themeTimer) return;
+    themeTimer = setTimeout(() => {
+      themeTimer = null;
+      bugzillaRefreshCopyButtonThemes();
+    }, 100);
+  };
+  const themeObserver = new MutationObserver(scheduleThemeRefresh);
   [document.documentElement, document.body].filter(Boolean).forEach((element) => {
     themeObserver.observe(element, { attributes: true, attributeFilter: ["class", "style"] });
   });
-  window.matchMedia?.("(prefers-color-scheme: dark)").addEventListener?.("change", bugzillaSyncCopyButton);
+  window.matchMedia?.("(prefers-color-scheme: dark)").addEventListener?.("change", scheduleThemeRefresh);
 }
 
 bugzillaInit();

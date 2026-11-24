@@ -37,7 +37,8 @@ Non-goals:
 - `content/`: runtime content scripts injected per site:
   - `content/gmail.js`
   - `content/bugzilla.js`
-    - Adds a rich-link copy button beside the bug number on bug pages.
+    - Adds rich-link copy buttons beside the bug number and at the end of the summary title line (inside the h1) on bug pages.
+    - Button sync is idempotent (never moves buttons), debounced via `bugzillaScheduleSync`, and ignores mutations caused by its own buttons to avoid feedback loops with page scripts.
   - `content/phabricator.js`
     - Adds rich-link copy buttons beside Bugzilla Bug ID and the Differential revision ID, controlled by `enablePhabricatorCopyBugLink`.
   - `content/github.js`
@@ -144,7 +145,7 @@ Add a new site injection:
 
 GitHub-specific toggles include: `enableGithubTryStatusIcons` and `enableGithubBugLinks`; GitHub host access is optional and requested from the popup on GitHub PR pages.
 
-The Bugzilla copy-link button is controlled by `enableBugzillaCopyLink` and appears in the GitHub section of the popup and options page.
+The Bugzilla copy-link buttons (Bug ID and summary) are controlled by `enableBugzillaCopyLink` in the GitHub section of the popup and options page.
 
 Change Treeherder try-status behavior:
 

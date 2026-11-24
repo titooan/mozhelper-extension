@@ -10,3 +10,4 @@ node_modules/
 *.log
 .idea/
 *.iml
+full-task-graph.json
