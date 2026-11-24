@@ -5,6 +5,8 @@ const githubDefaultSettings = {
   enableGithubBugLinks: true
 };
 const GITHUB_TRY_LINK_PATTERN = /^https:\/\/treeherder\.mozilla\.org\/(#\/)?jobs\?/i;
+// Legacy PR pages use .markdown-title; the React PR UI uses a hashed CSS-module class (markdownTitle__xxxx).
+const GITHUB_PR_TITLE_SELECTOR = '.markdown-title, [class*="markdownTitle"]';
 const GITHUB_TRY_STATUS_CACHE = new Map();
 const GITHUB_TRY_ICONS = new WeakMap();
 const GITHUB_SUCCESS_TOOLTIP = "Passed";
@@ -316,7 +318,7 @@ function githubProcessBugLinks() {
   const isFirefoxPr = /^\/mozilla-firefox\/firefox\/pull\/\d+(?:\/|$)/i.test(location.pathname);
   if (!githubBugLinksEnabled || !isFirefoxPr) return;
 
-  document.querySelectorAll(".markdown-title").forEach((title) => {
+  document.querySelectorAll(GITHUB_PR_TITLE_SELECTOR).forEach((title) => {
     const walker = document.createTreeWalker(title, NodeFilter.SHOW_TEXT);
     const nodes = [];
     while (walker.nextNode()) {

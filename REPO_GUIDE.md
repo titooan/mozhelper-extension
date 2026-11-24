@@ -182,6 +182,7 @@ Frequent failure modes:
 - Logic changed only in `src/` or only in `content/` (desync)
 - Feature appears disabled due to `storage.sync` state
 - Host permission or URL pattern mismatch in `manifest.json`
+- GitHub PR title selector drift: the React PR UI uses hashed class `markdownTitle__xxxx`, so `content/github.js` matches `[class*="markdownTitle"]` as well as `.markdown-title`
 - Lando instance mismatch for Treeherder links that only carry `landoCommitID`/`landoInstance`
 
 Useful checks:

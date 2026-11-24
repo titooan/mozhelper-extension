@@ -51,6 +51,14 @@ describe("Firefox PR title bug links", () => {
     expect(link.href).to.equal("https://bugzilla.mozilla.org/show_bug.cgi?id=123");
   });
 
+  it("links bug numbers in the React PR UI title", async () => {
+    await setup();
+    document.body.innerHTML = '<h1><span class="f1 text-normal markdownTitle__jQX53G prc-Text-Text-9mHv3">Bug 2095146 - Advance sync</span><span class="sr-only"> - #459</span></h1>';
+    await flush();
+    const link = document.querySelector("h1 a");
+    expect(link.href).to.equal("https://bugzilla.mozilla.org/show_bug.cgi?id=2095146");
+  });
+
   it("ignores nonmatching titles and existing links", async () => {
     await setup();
     document.body.innerHTML = '<span class="markdown-title">No bug number <a href="/existing">Bug 42</a></span>';
